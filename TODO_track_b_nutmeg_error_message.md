@@ -170,16 +170,17 @@ fails; Track A's 3 dynamic-geometry DM→MDL fixes were done in the cellblender 
 ## How to re-run this test
 
 ```bash
-mp                                   # activate the MCell Python venv (per-machine shell alias)
-cd "$ROOT/mcell_tests"               # $ROOT = the build root (see CLAUDE.md)
+cd "$ROOT"                               # $ROOT = the build root (see CLAUDE.md)
+source mcell_python/.venv/bin/activate   # this root's MCell Python venv
+cd mcell_tests
 python3 run_tests.py -s \
   -m "$ROOT/mcell_tools/work/build_mcell" \
   -t "$(command -v python3)" \
   -p 2000_shorter_error_message
 ```
 
-- **`mp`** activates the MCell Python venv. Where the venv lives differs from machine to machine,
-  so the wiki never hardcodes the interpreter path; after `mp`, `python3` *is* the venv
+- **`source mcell_python/.venv/bin/activate`** (from `$ROOT`) activates this root's MCell Python
+  venv, so the wiki never hardcodes the interpreter path; after it, `python3` *is* the venv
   interpreter, and `-t "$(command -v python3)"` hands it to the runner (doc 05 §7).
 - **`-m` must be an absolute path.** The runner exports it verbatim as `MCELL_PATH` and runs the
   model from the test's work dir, so a relative path (e.g. `../mcell_tools/work/build_mcell`)

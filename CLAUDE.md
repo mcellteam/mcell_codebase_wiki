@@ -36,9 +36,10 @@ too: a **local** git repo (branch `main`, no remote), so wiki edits show up in i
 `git status` / `git diff`. (`wiki_check.py` lists it among the repos it scans; no `RULES` row
 matches it, so that is harmless.)
 
-**Activate the MCell Python venv with `mp`** — a per-machine shell alias (the venv's location
-differs from machine to machine). Never hardcode the interpreter path in docs or commands; after
-`mp`, use `python3` (e.g. `run_tests.py -t "$(command -v python3)"`). Details: doc 05 §7.
+**Activate the MCell Python venv from `$ROOT`:** `source mcell_python/.venv/bin/activate` — the
+same command on every machine, and always this root's own venv (a personal shell alias such as
+`mp` may point at another root's). Never hardcode the interpreter path in docs or commands; after
+activating, use `python3` (e.g. `run_tests.py -t "$(command -v python3)"`). Details: doc 05 §7.
 
 MCell builds **two artifacts from one tree**: the `mcell` executable (MCell3 C front-end, parses
 MDL, can use NFsim) and `mcell.so` (the `import mcell` Python module, target `mcell4_so`,

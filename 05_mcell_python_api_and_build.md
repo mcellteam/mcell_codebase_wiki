@@ -553,13 +553,19 @@ So: the static CPython 3.13 is the one CMake links the `mcell.so` against; the
 environment that `import mcell` and the model scripts run inside, with all the
 required third-party packages.
 
-**Activating the venv: `mp`.** Each maintainer machine defines a shell alias `mp`
-that sources this venv's `bin/activate`. Where the venv lives differs from machine
-to machine (it need not be this `$ROOT`'s `mcell_python/.venv`), so `mp` is the one
-invocation that works everywhere, and the wiki never hardcodes an interpreter path.
-After `mp`, `python3` is the venv interpreter — e.g. pass it to the test runner as
-`run_tests.py -t "$(command -v python3)"`. `mp` is an interactive-shell alias; in a
-non-interactive shell (scripts, agents) run `bash -ic 'mp && …'`.
+**Activating the venv.** Each build root has its own venv in `mcell_python/.venv`.
+Activate it from `$ROOT` with
+
+```sh
+source mcell_python/.venv/bin/activate
+```
+
+— the same command on every machine, and always the venv of the root you are in, so
+the wiki never hardcodes an interpreter path. After activating, `python3` is the venv
+interpreter — e.g. pass it to the test runner as `run_tests.py -t "$(command -v python3)"`.
+Being a plain `source`, it also works in non-interactive shells (scripts, agents):
+`source "$ROOT/mcell_python/.venv/bin/activate" && …`. (A maintainer's personal shell
+alias such as `mp` may point at another root's venv — check before relying on it.)
 
 ## 8. MDLr → MDL Python tooling & utils (pointers)
 
