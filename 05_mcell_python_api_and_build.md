@@ -596,16 +596,17 @@ Two families of Python tooling are copied into the build tree (not generated):
     the script directly (`__main__`) or importing it under any other name (e.g. `model`)
     still runs it. Landed as `98980098` on `mcell4_dev` and cherry-picked to
     `mcell4_nanobind` as `4587bf63`; the generator code is identical on both branches.
-  - **Checkpoint resume works with the guard.** Tested on both branches (2026-10-15): a run
-    saves a checkpoint and stops, and the next run resumes from it and finishes.
-  - **One gap: a worker started *after* a checkpoint was written.** The code that checks for
-    a checkpoint and resumes from it is emitted above the guard (`mcell4_generator.cpp:1295`,
-    text from `get_resume_from_checkpoint_code()`,
-    `mcell/libmcell/api/python_export_constants.cpp:53`), so a `spawn` worker runs it too. A
-    worker started before any checkpoint exists, e.g. at the beginning of
-    `custom_init_and_run`, finds none and does its task. A worker started once a checkpoint
-    exists resumes the simulation from it instead: in the test it re-ran iterations 5 to 10
-    alongside the parent and exited 0 without doing its task. Same on both branches.
+  - **Checkpoint resume works with the guard.** A run saves a checkpoint and stops, and the
+    next run resumes from it and finishes. Tested on both branches (2026-10-15, and again
+    after the fix below).
+  - **The checkpoint-resume code is guarded the same way.** It is emitted above the run block
+    (`mcell4_generator.cpp:1295`, text from `get_resume_from_checkpoint_code()`,
+    `mcell/libmcell/api/python_export_constants.cpp:53`). Until it was guarded, a `spawn`
+    worker started after a checkpoint was written found that checkpoint and resumed the
+    simulation from it instead of doing its task. Fixed in `a972bce4` on `mcell4_dev`,
+    cherry-picked to `mcell4_nanobind` as `a62d7233`. Regression test:
+    `mcell_tests/tests/data_model_pymcell4/0830_customization_spawn_after_checkpoint`
+    (`0ac2e40c` on `mcell4_dev`, `36d1772a` on `mcell4_nanobind`).
 
 These are referenced here at pointer level; they are downstream consumers of the
 generated API, not part of the codegen/module-build path.

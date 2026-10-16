@@ -663,8 +663,13 @@ entirely; nanobind is the sole binding library everywhere. The migration is comp
     test models differs only by the guard in `model.py`; direct runs, checkpoint save + resume,
     and a `spawn` child behave as intended; the data-model and nutmeg conversion modes of
     `mcell_tests` (1,385 results) show no new failures against the Jul 7 full-suite run. Details
-    in doc 05 §8, including the one gap: resume itself works, but a `spawn` worker started
-    after a checkpoint was written resumes the simulation instead of doing its task.
+    in doc 05 §8.
+  - **Follow-up fix (2026-10-16), both branches:** the guard left the checkpoint-resume code
+    unguarded, so a `spawn` worker started after a checkpoint was written resumed the
+    simulation instead of doing its task. Fixed on `mcell4_dev` as `a972bce4` and
+    cherry-picked here as `a62d7233`, with the regression test
+    `0830_customization_spawn_after_checkpoint` in `mcell_tests` (`0ac2e40c` → `36d1772a`).
+    Details: doc 05 §8.
   - **`7e5be891` — identity `__hash__` emitted by `gen.py`: not ported, not needed.** It fixes the
     pybind11 regression behind §11.6's `3100` failure. nanobind doesn't set `__hash__ = None`
     when `__eq__` is defined: on the nanobind `mcell.so`, `Species`, `Complex`, `Color`,
