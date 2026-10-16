@@ -511,8 +511,11 @@ Release** pybind11 build (the `mcell4_dev` checkout) — so the *only* variable 
   `nutmeg4_pymcell4/2000_shorter_error_message` — the cosmetic error-message-format difference
   (finding 8). Needs an expected-pattern update, not a code fix (**done — §12**).
 - **One** test fails on pybind11 but passes on nanobind:
-  `pymcell4/3100_dyn_vert_blocking_and_intramembrane_rxns` (nanobind matches the reference data;
-  pybind doesn't) — nanobind is strictly no worse.
+  `pymcell4/3100_dyn_vert_blocking_and_intramembrane_rxns` — nanobind is strictly no worse. The
+  cause is not reference data: pybind11 ≥ 2.6 sets `__hash__ = None` on any class that defines
+  `__eq__`, so the test's model, which hashes API objects, fails with
+  `TypeError: unhashable type: 'mcell.GeometryObject'`. nanobind keeps the default identity
+  hash. (`mcell4_dev` fixed the pybind11 side in `7e5be891`; see §12.)
 - **~380 failures are common to both** — pre-existing/environmental in this checkout (reference-data
   mismatches; the set includes pure-MDL tests that never load `mcell.so`), so unrelated to the
   binding library.
@@ -652,6 +655,22 @@ entirely; nanobind is the sole binding library everywhere. The migration is comp
   `matchPattern = "element_connections: list"` → test **PASSED** on the nanobind build. Remaining:
   merge `mcell_tests` `mcell4_nanobind` → `mcell4_dev` together with `mcell`'s. Full write-up:
   [`TODO_track_b_nutmeg_error_message.md`](TODO_track_b_nutmeg_error_message.md).
+- ☑ **`mcell` fixes from `mcell4_dev` (checked 2026-10-15).** Two `mcell4_dev` commits made after
+  this branch's base `e5c71769` were reviewed:
+  - **`98980098` — `__mp_main__` guard in the generated `model.py`:** cherry-picked as
+    **`4587bf63`** and pushed. `mcell4_generator.cpp` is now byte-identical on both branches, so
+    the merge sees the same change on both sides. Verified on Linux: regenerated output for four
+    test models differs only by the guard in `model.py`; direct runs, checkpoint save + resume,
+    and a `spawn` child behave as intended; the data-model and nutmeg conversion modes of
+    `mcell_tests` (1,385 results) show no new failures against the Jul 7 full-suite run. Details,
+    and the one gap the guard leaves (checkpoint resume in a `spawn` child): doc 05 §8.
+  - **`7e5be891` — identity `__hash__` emitted by `gen.py`: not ported, not needed.** It fixes the
+    pybind11 regression behind §11.6's `3100` failure. nanobind doesn't set `__hash__ = None`
+    when `__eq__` is defined: on the nanobind `mcell.so`, `Species`, `Complex`, `Color`,
+    `GeometryObject`, and `ReleaseSite` hash and work as dict keys and set members. The commit's
+    other change, the `register_reaction_callback` docstring, is already in this branch's
+    generated code. At merge time, don't carry its pybind11 `__hash__` lines into the nanobind
+    `gen.py` or `generated/`.
 
 ---
 

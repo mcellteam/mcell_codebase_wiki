@@ -583,6 +583,25 @@ Two families of Python tooling are copied into the build tree (not generated):
   CellBlender **data model** JSON into a pymcell4 Python script) and `utils/`
   itself (`mcell4_runner`, `bng_analyzer`, plotting/visualization helpers). `bng2/`
   (BioNetGen) is copied to `<build>/bng2/` (`CMakeLists.txt:510`).
+  - **The generated `model.py` guards its run block.** `MCell4Generator::generate_model`
+    (`mcell/utils/data_model_to_pymcell/mcell4_generator.cpp:1245`) wraps the
+    "initialization and execution" section in `if __name__ != '__mp_main__':` (`:1341`).
+    That section is the `custom_init_and_run` hook, or `initialize()` → checkpoint
+    scheduling → `run_iterations()` → `end_simulation()`. A `multiprocessing` child started
+    with the `spawn` method (the default on macOS and Windows) re-imports the main script as
+    `__mp_main__`. Without the guard, the child re-executed that section: it re-ran the
+    simulation, or failed with multiprocessing's "bootstrapping phase" `RuntimeError` when
+    the section itself starts processes. Running the script directly (`__main__`) or
+    importing it under any other name (e.g. `model`) still runs it. Landed as `98980098` on
+    `mcell4_dev` and cherry-picked to `mcell4_nanobind` as `4587bf63`; the generator code is
+    identical on both branches.
+  - **Gap: the checkpoint-resume preamble is outside the guard.** It is emitted earlier
+    (`:1295`, text from `get_resume_from_checkpoint_code()`,
+    `mcell/libmcell/api/python_export_constants.cpp:53`) and runs at import. So a `spawn`
+    child started *after* a checkpoint was written resumes the simulation from that
+    checkpoint instead of running its target. Reproduced 2026-10-15: the child printed
+    "resuming a checkpoint", ran to the last iteration, and exited 0 without reporting back.
+    The checkpoint's own `model.py`, written by MCell's exporter, has no guard either.
 
 These are referenced here at pointer level; they are downstream consumers of the
 generated API, not part of the codegen/module-build path.
