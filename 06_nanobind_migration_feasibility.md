@@ -669,6 +669,12 @@ entirely; nanobind is the sole binding library everywhere. The migration is comp
     simulation instead of doing its task. Fixed on `mcell4_dev` as `a972bce4` and
     cherry-picked here as `a62d7233`, with the regression test
     `0830_customization_spawn_after_checkpoint` in `mcell_tests` (`0ac2e40c` → `36d1772a`).
+  - **Second follow-up (2026-10-20), made on this branch first:** the resume code set
+    `sys.path` to the `mcell.VectorStr` returned by `m.run_utils.remove_cwd()`, so a `spawn`
+    start after a resume failed. Fixed here as `e78a630d` and cherry-picked to `mcell4_dev` as
+    `575328ae` (`python_export_constants.cpp` stays byte-identical on both branches), with the
+    regression test `0840_customization_spawn_after_resume` in `mcell_tests`
+    (`3b0159db` → `ecbd4f69`). Details: doc 05 §8.
     Details: doc 05 §8.
   - **`7e5be891` — identity `__hash__` emitted by `gen.py`: not ported, not needed.** It fixes the
     pybind11 regression behind §11.6's `3100` failure. nanobind doesn't set `__hash__ = None`

@@ -607,6 +607,17 @@ Two families of Python tooling are copied into the build tree (not generated):
     cherry-picked to `mcell4_nanobind` as `a62d7233`. Regression test:
     `mcell_tests/tests/data_model_pymcell4/0830_customization_spawn_after_checkpoint`
     (`0ac2e40c` on `mcell4_dev`, `36d1772a` on `mcell4_nanobind`).
+  - **The resume code keeps `sys.path` a list.** It drops the model directory from
+    `sys.path` with `m.run_utils.remove_cwd()` (`mcell/libmcell/api/run_utils.cpp:77`), which
+    returns an `mcell.VectorStr` because every `List[…]` type is bound as an opaque vector
+    (§1.8). Until the result was wrapped in `list()`, code that ran after a resume and used
+    list methods on `sys.path` failed; starting a `spawn` process raised
+    `AttributeError: 'mcell.VectorStr' object has no attribute 'copy'`. Fixed in `e78a630d` on
+    `mcell4_nanobind`, cherry-picked to `mcell4_dev` as `575328ae`. Regression test:
+    `mcell_tests/tests/data_model_pymcell4/0840_customization_spawn_after_resume`
+    (`3b0159db` on `mcell4_nanobind`, `ecbd4f69` on `mcell4_dev`). `model.py` files generated
+    before the fix, and hand-written copies of the resume code (19 `model.py` files in
+    `mcell_tests`), keep the old line.
 
 These are referenced here at pointer level; they are downstream consumers of the
 generated API, not part of the codegen/module-build path.
