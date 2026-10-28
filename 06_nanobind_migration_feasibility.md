@@ -255,7 +255,8 @@ Rough effort: **a few days** for someone fluent in the codegen, dominated by the
    (garbage, or another molecule's position). Fixed in `e1e5ded2` by emitting
    `rv_policy::reference_internal`, which is also nanobind's own default for `def_prop_rw` getters
    (`mcell/libs/nanobind/include/nanobind/nb_class.h:701`): in-place mutation still works and the
-   view keeps its owner alive. See doc 05 §1.7.
+   view keeps its owner alive. See doc 05 §1.7. The pybind11 build on `mcell4_dev` had the same
+   bug and got the same fix as `1d47c148` (see §12).
 2. **`enum … export_values()`.** MCell relies on exported enum values and module-level constants
    (`STATE_UNSET`, `BOND_UNBOUND`, orientation enums, …). Confirm the nanobind enum equivalent
    reproduces the exact Python-visible names the API and `.pyi` promise.
@@ -690,12 +691,15 @@ entirely; nanobind is the sole binding library everywhere. The migration is comp
     other change, the `register_reaction_callback` docstring, is already in this branch's
     generated code. At merge time, don't carry its pybind11 `__hash__` lines into the nanobind
     `gen.py` or `generated/`.
-- ☑ **List-property lifetime (2026-10-28), this branch only.** `gen.py` now emits
+- ☑ **List-property lifetime (2026-10-28), both branches.** `gen.py` now emits
   `rv_policy::reference_internal` for list attributes (`e1e5ded2`, also on
-  `mcell4_nanobind_novtk`); see §8 item 1 and doc 05 §1.7. `mcell4_dev`'s pybind11 `gen.py` uses
+  `mcell4_nanobind_novtk`); see §8 item 1 and doc 05 §1.7. `mcell4_dev`'s pybind11 `gen.py` used
   the same pattern (`PYBIND11_MAKE_OPAQUE(std::vector<double>)` plus
-  `return_value_policy::reference` on list properties), so the pybind11 build is probably affected
-  as well; this was not run there and not ported. At merge time keep the nanobind line.
+  `return_value_policy::reference` on list properties) and was affected too: reads through a
+  temporary owner returned garbage, and a nested read could raise `MemoryError`. Fixed there as
+  `1d47c148` with `return_value_policy::reference_internal`; the same 49 properties change, the
+  `pymcell4_api` results are unchanged and the test outputs are byte-identical. At merge time keep
+  the nanobind line.
 
 ---
 
