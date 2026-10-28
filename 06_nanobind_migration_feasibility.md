@@ -249,6 +249,13 @@ Rough effort: **a few days** for someone fluent in the codegen, dominated by the
    nested-index **read** (which nanobind serves correctly from the copy). Geometry is mutated via
    API methods (`add_vertex_move`/`apply_vertex_moves`, `set_wall_color`), never by writing into the
    bound list. **No `rv_policy::reference_internal` or special handling needed.**
+   → **Follow-up (2026-10-28): lifetime was missed.** The audit above covered mutation only.
+   `reference` hands Python a view of the list with no tie to the object that owns it, so a view
+   taken from a temporary owner outlives it: `model.get_molecule(i).pos3d` read freed memory
+   (garbage, or another molecule's position). Fixed in `e1e5ded2` by emitting
+   `rv_policy::reference_internal`, which is also nanobind's own default for `def_prop_rw` getters
+   (`mcell/libs/nanobind/include/nanobind/nb_class.h:701`): in-place mutation still works and the
+   view keeps its owner alive. See doc 05 §1.7.
 2. **`enum … export_values()`.** MCell relies on exported enum values and module-level constants
    (`STATE_UNSET`, `BOND_UNBOUND`, orientation enums, …). Confirm the nanobind enum equivalent
    reproduces the exact Python-visible names the API and `.pyi` promise.
@@ -683,6 +690,12 @@ entirely; nanobind is the sole binding library everywhere. The migration is comp
     other change, the `register_reaction_callback` docstring, is already in this branch's
     generated code. At merge time, don't carry its pybind11 `__hash__` lines into the nanobind
     `gen.py` or `generated/`.
+- ☑ **List-property lifetime (2026-10-28), this branch only.** `gen.py` now emits
+  `rv_policy::reference_internal` for list attributes (`e1e5ded2`, also on
+  `mcell4_nanobind_novtk`); see §8 item 1 and doc 05 §1.7. `mcell4_dev`'s pybind11 `gen.py` uses
+  the same pattern (`PYBIND11_MAKE_OPAQUE(std::vector<double>)` plus
+  `return_value_policy::reference` on list properties), so the pybind11 build is probably affected
+  as well; this was not run there and not ported. At merge time keep the nanobind line.
 
 ---
 
