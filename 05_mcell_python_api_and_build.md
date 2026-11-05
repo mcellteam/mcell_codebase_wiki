@@ -491,7 +491,9 @@ Build-orchestration view (dep internals are covered in the libbng/nfsim docs):
   warnings, `-fpermissive`, optimization, and `-DPYTHON_VERSION=…`; linked
   `PRIVATE` into every first-party + bundled target, `mcell_geometry` included
   (`:578-587`). The geometry files add per-file flags on top: C++23 and no
-  floating-point contraction (`src4/CMakeLists.txt:42-89`, doc 04 §6.6).
+  floating-point contraction. So do two engine files whose results must not depend on the
+  platform: no contraction for `bngl_exporter.cpp` and `diffuse_react_event.cpp`
+  (`src4/CMakeLists.txt:42-108`, doc 04 §6.6).
 - **Code-gen at configure time** — flex/bison for the MDL parser/scanner
   (`:297-317`), `version_flags.h` (`:244-283`) and `version.h` (`:321-335`) generation.
 - **Two binary targets:**

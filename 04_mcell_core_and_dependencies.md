@@ -91,7 +91,7 @@ stay consistent during translation.
   the pure MCell4 path: the Python API builds an MCell4 `World` directly via
   `libmcell`, with **no** MCell3/MDL involved.
 - Both link the common static engine library **`mcell4`**
-  (`add_library(${PROJECT_NAME} STATIC ...)`, `src4/CMakeLists.txt:97-100`, aliased
+  (`add_library(${PROJECT_NAME} STATIC ...)`, `src4/CMakeLists.txt:116-119`, aliased
   `MCell::mcell4`).
 
 ---
@@ -412,7 +412,7 @@ This is what makes rule-based models with combinatorially huge state spaces trac
 
 Confirmed by search: the only `nfsim` occurrences in `src4/` are (a) commented-out
 field references in the converter (`mcell3_world_converter.cpp:1092-1094`), (b) the
-nfsimCInterface include path in `src4/CMakeLists.txt:112` (carried for the shared link),
+nfsimCInterface include path in `src4/CMakeLists.txt:131` (carried for the shared link),
 and (c) a `nfsim_export` *naming* flag in the BNGL exporter (`bngl_exporter.cpp:43`) that
 only affects how rates are *labeled* when exporting BNGL for an external NF run. The
 MCell4 engine itself performs no NFsim queries. Network-free behavior in MCell4 is
@@ -563,7 +563,8 @@ depends on nothing else in MCell, so `data_model_to_pymcell` can link it on its 
     `Disjoint`.
 - **No floating-point contraction** in `predicates.cpp` and `geometry_analysis.cpp` (§6.6). Fused
   multiply-add breaks the predicates' error-free arithmetic, and it would change the volume's last
-  bits from one platform to another.
+  bits from one platform to another. The BNGL export's last step (`bngl_exporter.cpp`) is compiled
+  the same way, so exported volumes are identical on every platform.
 
 ### 6.5 Errors and warnings that users see
 
@@ -605,10 +606,10 @@ appear there. Bow-tie and pinched vertices are not checked yet (doc 07).
 
 ### 6.6 Build
 
-- **The library** (`src4/CMakeLists.txt:42-101`). `GEOMETRY_SOURCE_FILES`
+- **The library** (`src4/CMakeLists.txt:42-120`). `GEOMETRY_SOURCE_FILES`
   (`src4/CMakeLists.txt:44-47`: `predicates.cpp`, `geometry_analysis.cpp`) make up the static
-  library `mcell_geometry`, alias `MCell::geometry` (`:91-95`). `mcell4` links it publicly
-  (`:101`). `libmcell` (`libmcell/CMakeLists.txt:157`) and `data_model_to_pymcell`
+  library `mcell_geometry`, alias `MCell::geometry` (`src4/CMakeLists.txt:110-114`). `mcell4`
+  links it publicly (`:120`). `libmcell` (`libmcell/CMakeLists.txt:157`) and `data_model_to_pymcell`
   (`utils/data_model_to_pymcell/CMakeLists.txt:28`) link it privately.
 - **Per-file flags**, all in `src4/CMakeLists.txt`:
   - The new `.cpp` files are compiled as C++23 (`MCELL_CXX23`, `src4/CMakeLists.txt:54-58`):
@@ -619,6 +620,12 @@ appear there. Bow-tie and pinched vertices are not checked yet (doc 07).
     for MSVC; `/clang:-ffp-contract=off` for clang-cl, which contracts even with `/fp:precise`.
   - `mesh_utils.cpp` includes glm through MCell's headers, so glm's deprecated-volatile warning is
     switched off for it (`MCELL_CXX23_GLM`, `src4/CMakeLists.txt:81-89`).
+  - Two engine files are compiled without contraction too (`src4/CMakeLists.txt:91-108`), so
+    that their results are the same on every platform. The macOS check found both (doc 07 §8):
+    - `bngl_exporter.cpp`: a compartment's exported volume is its volume times `length_unit^3`
+      minus its children's volumes, one multiply-subtract;
+    - `diffuse_react_event.cpp`: the tile-neighbor search across a shared edge
+      (`grid_utils.inl`) places tiles from the edge's length and compares the positions exactly.
 - **Platform floor:** GCC 11+, MSVC 2022, or Xcode 15+ on macOS 13.3+. This comes from
   `std::to_chars` for double, `std::ranges` and `std::bit_cast`. MCell sets no
   `CMAKE_OSX_DEPLOYMENT_TARGET`.

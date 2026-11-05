@@ -57,7 +57,7 @@
 | 2026-11-02 | Names: `vtk_utils` / `VtkUtils` became `counted_volume_utils` / `CountedVolumeUtils`. New mesh code goes into `MeshUtils`. |
 | 2026-10-29, 11-04 | **Mesh checks are warnings, never errors**, so that test runs never stop halfway. Each is one machine-parsable line, in five checks (A, B1, B2, C, D; doc 04 §6.5). Bow-tie and pinched vertices come later. |
 | 2026-11-04 | Fix the counted-volume crash found while checking the warning texts (§8). |
-| 2026-11-05 | The docs and the merge plan (this document); macOS and Windows checks on the user's machines. New header files use `.hpp`. |
+| 2026-11-05 | The docs and the merge plan (this document); macOS and Windows checks on the user's machines. New header files use `.hpp`. After the macOS check: `bngl_exporter.cpp` without contraction, as part of the removal, and `diffuse_react_event.cpp` without contraction, as a separate fix (§8). |
 
 ## 3. Phases and commits
 
@@ -75,7 +75,7 @@ All in `mcell` on `mcell4_nanobind_novtk` unless noted. Each phase was gated by 
 | 3 | VTK removed: code, CMake, the A/B check, and the build step (`mcell_tools` branch `mcell4_nanobind`). A separate commit renamed `vtk_utils` to `counted_volume_utils`. | `40c47842`, `f09b92e8`; `mcell_tools` `5fb3d0c` |
 | 4 | Mesh checks as parsable warnings. A separate commit first moved `get_mesh` and `get_clean_mesh` into `MeshUtils`. | `58bb5563`, `81b63cdf` |
 | fix | Counted volumes of intersecting objects that have a parent (§8). | `c3d77618`; `mcell_tests` `ba0ae972` |
-| 5 | The new headers renamed to `.hpp` (a rename only); these docs; macOS and Windows checks. | `476ca1e1`; the rest in progress |
+| 5 | The new headers renamed to `.hpp` (a rename only). `bngl_exporter.cpp` built without contraction, so that exported volumes are the same on every platform (§8). These docs; macOS and Windows checks. | `476ca1e1`, `cd6cc248`; the rest in progress |
 | 6 | Merge into `mcell4_nanobind`, and these docs into the wiki. | to do |
 
 ## 4. What replaced VTK
@@ -145,6 +145,8 @@ no simulation result. Only VTK's own errors, such as the reversed nesting, diffe
 - **A failed OBJ write** prints "Error: Could not write geometry to <prefix>.obj and <prefix>.mtl."
   and the run continues. VTK printed its own error and also continued.
 - **Initialization is faster** with many counted objects (§7). The build no longer contains VTK.
+- **On ARM64 (Apple silicon), results now match x86-64** where the macOS check found them
+  differing: four exported volumes that were 1 ULP off, and two tests that failed (§8).
 
 ## 6. How it was checked
 
@@ -181,7 +183,13 @@ no simulation result. Only VTK's own errors, such as the reversed nesting, diffe
 - **Platforms.**
   - `predicates.cpp` cross-compiles for arm64 macOS and for x64 and ARM64 Windows (clang-cl), with 0
     fused multiply-adds under the chosen flags. Without them, arm64 has 267.
-  - Building and testing on a Mac and a Windows machine is part of phase 5.
+  - **macOS** (2026-11-05: Apple M1 Pro, macOS 27.2, AppleClang 21), on a copy of the build root:
+    - the new code builds without warnings of its own, and its two floating-point objects have no
+      fused multiply-adds;
+    - all 34 warning and error models print what Linux prints;
+    - in a first tier of 277 tests, every difference from Linux came from contraction in older
+      code (§8). After the two fixes, the statuses and all 192 exported BNGL files match Linux.
+  - **Windows:** part of phase 5.
 
 ## 7. The numbers
 
@@ -198,7 +206,9 @@ no simulation result. Only VTK's own errors, such as the reversed nesting, diffe
 The mesh-check time was measured in MCell (`mdl/3640`). For comparison, `init_counted_volumes` of the
 same model, with its waypoints, takes 5.3 s.
 
-## 8. Found along the way: counted volumes of intersecting objects with a parent
+## 8. Found along the way
+
+### Counted volumes of intersecting objects with a parent
 
 While checking the phase-4 warning texts, an older bug (2020) showed up and was confirmed with a
 small model.
@@ -216,6 +226,27 @@ small model.
 - **The test.** `mcell_tests` `tests/pymcell4_positive/2610_count_in_intersecting_objects_w_parent`
   (`ba0ae972`) checks the counts against the molecules' positions after every iteration. It fails
   without the fix.
+
+### Found by the macOS check: contraction in two older expressions
+
+Apple Clang fuses a multiply and an add into one instruction by default on ARM64; x86-64 has no fused
+multiply-add without `-mfma`. The macOS session isolated the two expressions that made its results
+differ from Linux. It bisected objects, functions and call sites. The build from before the removal
+showed both.
+- **`src4/bngl_exporter.cpp:213`** (2021): a compartment's exported volume is its volume times
+  `length_unit^3` minus its children's volumes, one multiply-subtract. Four exported volumes were 1
+  ULP off, e.g. `VOLUME_L4 0.12499999999999999` instead of `0.125`. Fixed in `cd6cc248` by
+  compiling the file without contraction, which completes the removal's platform-independent
+  volumes.
+- **`len3_squared` (`src4/defines.h:677`, 2019), through `distance3` at `src4/grid_utils.inl:993`.**
+  The tile-neighbor search across a shared edge places tiles from the edge's length and compares the
+  positions exactly, so one bit changes which tiles are searched for a reaction partner. Tests
+  `data_model/2800` and `data_model_pymcell4/0820` failed on Apple silicon. This is a separate fix,
+  outside the removal: `229cbbfc` compiles `diffuse_react_event.cpp` without contraction.
+
+On Linux x86-64 both changes leave `mcell.so` byte-identical. Other MCell files still contract on
+ARM64. A build of the whole of MCell without contraction also matched Linux in those 277 tests, and
+is the next step if the full suite finds more differences there.
 
 ## 9. What is left, and where the records are
 
