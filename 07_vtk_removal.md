@@ -75,7 +75,7 @@ All in `mcell` on `mcell4_nanobind_novtk` unless noted. Each phase was gated by 
 | 3 | VTK removed: code, CMake, the A/B check, and the build step (`mcell_tools` branch `mcell4_nanobind`). A separate commit renamed `vtk_utils` to `counted_volume_utils`. | `40c47842`, `f09b92e8`; `mcell_tools` `5fb3d0c` |
 | 4 | Mesh checks as parsable warnings. A separate commit first moved `get_mesh` and `get_clean_mesh` into `MeshUtils`. | `58bb5563`, `81b63cdf` |
 | fix | Counted volumes of intersecting objects that have a parent (§8). | `c3d77618`; `mcell_tests` `ba0ae972` |
-| 5 | The new headers renamed to `.hpp`; these docs; macOS and Windows checks. | in progress |
+| 5 | The new headers renamed to `.hpp` (a rename only); these docs; macOS and Windows checks. | `476ca1e1`; the rest in progress |
 | 6 | Merge into `mcell4_nanobind`, and these docs into the wiki. | to do |
 
 ## 4. What replaced VTK
