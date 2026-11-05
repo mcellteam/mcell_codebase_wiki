@@ -132,9 +132,9 @@ src4/
 ├── geometry_utils.inl, wall_utils.inl, grid_utils.inl, dyn_vertex_utils.inl
 ├── rxn_utils.inl
 │   ── Geometry analysis (§6; the .cpp files are C++23) ──
-├── predicates.{h,cpp}             # Shewchuk's exact orientation predicates
-├── geometry_analysis.{h,cpp}      # mesh algorithms: closedness, volume, containment, OBJ writer
-├── mesh_utils.{h,cpp}             # meshes of geometry objects; mesh-check warnings
+├── predicates.{hpp,cpp}           # Shewchuk's exact orientation predicates
+├── geometry_analysis.{hpp,cpp}    # mesh algorithms: closedness, volume, containment, OBJ writer
+├── mesh_utils.{hpp,cpp}           # meshes of geometry objects; mesh-check warnings
 ├── counted_volume_utils.{h,cpp}   # counted volumes, containment mapping, OBJ export
 │   ── Dependency glue / export ──
 ├── bng_data_to_datamodel_converter.{h,cpp}, bngl_exporter.{h,cpp}
@@ -454,9 +454,9 @@ Four file pairs in `src4/` hold all of it. The rest of MCell calls them.
 
 | Files | Namespace | Role |
 |---|---|---|
-| `src4/predicates.{h,cpp}` | `MCell::Predicates` | Shewchuk's adaptive exact `orient2d` and `orient3d` (`predicates.h:24`, `:30`), ported from his public-domain C implementation. The sign is always exact: zero only for exactly collinear or coplanar points. `exactinit()` runs once, when the library is loaded (`predicates.cpp:377`). |
-| `src4/geometry_analysis.{h,cpp}` | `MCell::GeometryAnalysis` | The algorithms on plain meshes: points are `std::array<double, 3>` and triangles are index triples (`geometry_analysis.h:37-44`). It includes no MCell header. |
-| `src4/mesh_utils.{h,cpp}` | `MCell::MeshUtils` | MCell's side. It builds the mesh of a `GeometryObject` (`get_mesh`, `get_clean_mesh`, `mesh_utils.h:42`, `:47`) and runs the mesh checks, which print parsable warnings (§6.5). |
+| `src4/predicates.{hpp,cpp}` | `MCell::Predicates` | Shewchuk's adaptive exact `orient2d` and `orient3d` (`predicates.hpp:24`, `:30`), ported from his public-domain C implementation. The sign is always exact: zero only for exactly collinear or coplanar points. `exactinit()` runs once, when the library is loaded (`predicates.cpp:377`). |
+| `src4/geometry_analysis.{hpp,cpp}` | `MCell::GeometryAnalysis` | The algorithms on plain meshes: points are `std::array<double, 3>` and triangles are index triples (`geometry_analysis.hpp:37-44`). It includes no MCell header. |
+| `src4/mesh_utils.{hpp,cpp}` | `MCell::MeshUtils` | MCell's side. It builds the mesh of a `GeometryObject` (`get_mesh`, `get_clean_mesh`, `mesh_utils.hpp:42`, `:47`) and runs the mesh checks, which print parsable warnings (§6.5). |
 | `src4/counted_volume_utils.{h,cpp}` | `MCell::CountedVolumeUtils` | Counted volumes, the containment mapping (shared with compartments), the parent search, the BNGL export volume and the OBJ export. Called `vtk_utils` / `VtkUtils` before the removal. |
 
 `predicates.cpp` and `geometry_analysis.cpp` form the static library `MCell::geometry` (§6.6). It
@@ -514,7 +514,7 @@ depends on nothing else in MCell, so `data_model_to_pymcell` can link it on its 
 
 ### 6.3 `GeometryAnalysis`: function → what it does → used by
 
-| Function (`geometry_analysis.h`) | What it does | Used by |
+| Function (`geometry_analysis.hpp`) | What it does | Used by |
 |---|---|---|
 | `clean_mesh` (`:50`) | Merges exactly equal points (0.0 equals −0.0). Numbers the points in the order the triangles first use them. Drops unused points and triangles that use a point twice. | the counted volumes, the compartments, the checks, `data_model_to_pymcell` |
 | `is_closed` (`:54`) | Every edge belongs to exactly two triangles. | the BNGL export volume |
@@ -536,7 +536,7 @@ depends on nothing else in MCell, so `data_model_to_pymcell` can link it on its 
 - **Precision.** Computation and output use double everywhere. Every decision (closed, touching,
   inside) takes its signs from the exact predicates. Decisions are therefore exact as long as no
   intermediate product underflows or overflows: coordinate differences between about 1e-80 and
-  1e80, or zero (`geometry_analysis.h:15-23`).
+  1e80, or zero (`geometry_analysis.hpp:15-23`).
 - **Edges are matched by exact coordinates** after `clean_mesh`; vertex indices play no part. MCell
   links walls the same way: `compatible_edges` accepts the same vertex or exactly equal coordinates
   (`src4/geometry.cpp:51`, `:93-96`). So two walls that use different copies of the same vertex are
