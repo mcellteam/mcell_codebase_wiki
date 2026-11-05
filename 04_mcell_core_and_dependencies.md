@@ -2,7 +2,8 @@
 
 > Developer reference for the MCell simulator core: the two engine generations
 > (`src/` = MCell3, `src4/` = MCell4), the MCell4 main loop and core objects, and
-> how the C++ engine consumes its three external dependencies (libbng, NFsim, VTK).
+> how the C++ engine consumes its two external dependencies (libbng, NFsim), plus the in-tree
+> geometry analysis that replaced VTK (§6).
 >
 > Companion documents (written by other agents):
 > - `01_libbng.md` — internals of the BNG library (`BNG::` namespace).
@@ -23,7 +24,7 @@ linked together:
 | | **MCell3 (legacy)** | **MCell4 (current)** |
 |---|---|---|
 | Directory | `mcell/src/` | `mcell/src4/` |
-| Language | C, compiled as C++ (`-std=gnu++17`) | Modern C++17 |
+| Language | C, compiled as C++ (`-std=gnu++17`) | Modern C++17 (the geometry `.cpp` files of §6 are C++23) |
 | Driven by | MDL text files (flex/bison parser) | Python API / BNGL (via libbng) |
 | Master state | `struct volume` (god-struct, `src/mcell_structs.h:1052`) | `class World` (`src4/world.h:57`) |
 | Species/rxn storage | hand-rolled hash tables in `volume` | delegated to `BNG::BNGEngine` |
@@ -130,8 +131,12 @@ src4/
 ├── diffusion_utils.inl, exact_disk_utils.inl
 ├── geometry_utils.inl, wall_utils.inl, grid_utils.inl, dyn_vertex_utils.inl
 ├── rxn_utils.inl
+│   ── Geometry analysis (§6; the .cpp files are C++23) ──
+├── predicates.{h,cpp}             # Shewchuk's exact orientation predicates
+├── geometry_analysis.{h,cpp}      # mesh algorithms: closedness, volume, containment, OBJ writer
+├── mesh_utils.{h,cpp}             # meshes of geometry objects; mesh-check warnings
+├── counted_volume_utils.{h,cpp}   # counted volumes, containment mapping, OBJ export
 │   ── Dependency glue / export ──
-├── vtk_utils.{h,cpp}              # ALL direct VTK usage (see §6)
 ├── bng_data_to_datamodel_converter.{h,cpp}, bngl_exporter.{h,cpp}
 │   ── MCell3<->MCell4 bridge ──
 ├── mcell3_world_converter.{h,cpp}
@@ -436,98 +441,202 @@ documented in `02_nfsim.md` / `03_nfsimCInterface.md`.
 
 ---
 
-## 6. How MCell Uses VTK (self-contained reference)
+## 6. Geometry Analysis: Counted Volumes, Compartments, Mesh Checks, OBJ Export (self-contained reference)
 
-> This section stands alone as MCell's "VTK usage" reference.
+> This section stands alone as MCell's geometry-analysis reference. Until 2026, MCell used VTK for
+> this work. The `mcell4_nanobind_novtk` branch replaced VTK with the in-tree code below, which has
+> no external dependencies. The reasons, the decisions and how the replacement was checked are in
+> doc 07.
 
-### 6.1 Where VTK is used
+### 6.1 Where the code is
 
-MCell uses VTK (the Visualization Toolkit) for **geometry analysis and export**, not for
-on-screen rendering during simulation. All *direct* VTK calls are concentrated in three
-files; the rest of the engine (`geometry.cpp`, `partition.cpp`, ...) only `#include`s
-`vtk_utils.h` and calls the `VtkUtils::` wrappers — it never touches VTK types itself.
+Four file pairs in `src4/` hold all of it. The rest of MCell calls them.
 
-| File | VTK role |
-|---|---|
-| `src4/vtk_utils.cpp` / `.h` | Core VTK consumer: counted-volume hierarchy, mesh closure/volume checks, OBJ export. `GeomObjectInfo` holds a `vtkSmartPointer<vtkPolyData>` (`vtk_utils.h:58`). |
-| `libmcell/api/compartment_utils.cpp` | Builds polydata for Python-API compartments; enclosure/containment tests. |
-| `libmcell/api/geometry_utils.cpp` | Geometry primitive creation; VTK includes mostly vestigial (see §6.4). |
+| Files | Namespace | Role |
+|---|---|---|
+| `src4/predicates.{h,cpp}` | `MCell::Predicates` | Shewchuk's adaptive exact `orient2d` and `orient3d` (`predicates.h:24`, `:30`), ported from his public-domain C implementation. The sign is always exact: zero only for exactly collinear or coplanar points. `exactinit()` runs once, when the library is loaded (`predicates.cpp:377`). |
+| `src4/geometry_analysis.{h,cpp}` | `MCell::GeometryAnalysis` | The algorithms on plain meshes: points are `std::array<double, 3>` and triangles are index triples (`geometry_analysis.h:37-44`). It includes no MCell header. |
+| `src4/mesh_utils.{h,cpp}` | `MCell::MeshUtils` | MCell's side. It builds the mesh of a `GeometryObject` (`get_mesh`, `get_clean_mesh`, `mesh_utils.h:42`, `:47`) and runs the mesh checks, which print parsable warnings (§6.5). |
+| `src4/counted_volume_utils.{h,cpp}` | `MCell::CountedVolumeUtils` | Counted volumes, the containment mapping (shared with compartments), the parent search, the BNGL export volume and the OBJ export. Called `vtk_utils` / `VtkUtils` before the removal. |
 
-### 6.2 What MCell does with VTK
+`predicates.cpp` and `geometry_analysis.cpp` form the static library `MCell::geometry` (§6.6). It
+depends on nothing else in MCell, so `data_model_to_pymcell` can link it on its own.
 
-1. **Counted-volume hierarchy** — to support COUNT-in-region observables, MCell must
-   know the nesting of geometry objects (which object is inside which). For every pair of
-   objects it runs a containment test and builds a parent/child tree:
-   - `convert_geometry_object_to_polydata` (`vtk_utils.cpp:71`) turns each MCell mesh
-     (walls + vertices) into a cleaned `vtkPolyData`.
-   - `geom_object_containment_test` (`vtk_utils.cpp:219`) classifies each pair as
-     Disjoint / Obj1-in-Obj2 / Obj2-in-Obj1 / Identical / Intersecting, using
-     collision detection + enclosed-point tests.
-   - `compute_containement_mapping` / `define_counted_volumes` /
-     `initialize_counted_volumes` (`vtk_utils.cpp:285/466/521`) assign counted-volume
-     indices. `initialize_counted_volumes` is the public entry point (called from
-     `world.cpp`).
-2. **Mesh validity & volume** — `is_watertight` (`vtk_utils.cpp:581`) checks a mesh is
-   closed; `get_geometry_object_volume` (`vtk_utils.cpp:599`) computes object volume
-   (needed to convert concentrations ↔ counts).
-3. **OBJ export** — `export_geometry_objects_to_obj` (`vtk_utils.cpp:628`) writes the
-   model geometry to Wavefront OBJ for external visualization (`World::export_geometry_to_obj`).
-4. **Compartment membership** (Python path) — `compartment_utils.cpp` uses enclosed-point
-   tests to determine which compartment a point/object belongs to.
+### 6.2 What MCell does with it
 
-### 6.3 VTK class → module → location → purpose
+1. **Counted-volume hierarchy.** Counting molecules inside objects needs, for each counted object,
+   the counted volume a molecule enters and the one it returns to. `World::init_counted_volumes`
+   (`src4/world.cpp:146`) calls `CountedVolumeUtils::initialize_counted_volumes`
+   (`src4/counted_volume_utils.cpp:320`). That function:
+   - checks the cleaned mesh of each counted object and makes a `Solid` of it
+     (`prepare_counted_object_solids`, `:50`; errors in §6.5);
+   - classifies every pair of objects with `GeometryAnalysis::containment`
+     (`compute_containement_mapping`, `:87`);
+   - sets each object's `counted_volume_index_inside` and `_outside` (`define_counted_volumes`, `:264`):
+     - an object that intersects another counted object gets `COUNTED_VOLUME_INDEX_INTERSECTS` on
+       both sides (`:280`, `:295`), so the counted volume of a molecule that crosses one of its
+       walls is recomputed from the molecule's position;
+     - any other object takes its inside index from its parents. Its outside index comes from its
+       direct parent: the parent on the longest containment path (`get_direct_parent_info`, `:163`),
+       with the path lengths cached in a `PathLengthCache`.
 
-The eight VTK modules requested in `find_package(VTK ... COMPONENTS)`
-(`CMakeLists.txt:44-52`) map exactly to the classes MCell uses:
+   If any step fails, the run stops with "Processing of counted volumes failed, terminating."
+   (`world.cpp:151`).
+2. **Compartments** (BNGL compartments in the Python API). `MCell4Converter` calls
+   `set_parent_and_children_compartments` (`libmcell/api/mcell4_converter.cpp:1076`,
+   `libmcell/api/compartment_utils.cpp:85`). It checks each compartment's mesh, converted to the
+   internal units the simulation will use (`:31`), and finds each compartment's parent with the
+   same `compute_containement_mapping` and `get_direct_parent_info`.
+3. **Volumes and areas.** One function, `GeometryAnalysis::volume_and_area` (§6.4), serves:
+   - `Region::initialize_volume_info_if_needed` (`src4/geometry.cpp:835`, call at `:867`), which
+     gives the volume that a release by concentration uses;
+   - the BNGL export, through `CountedVolumeUtils::get_geometry_object_volume`
+     (`counted_volume_utils.cpp:361`, called at `src4/bngl_exporter.cpp:99` and `:208`). It uses the
+     same walls in the same order as the object's region, so the exported volume is the one
+     releases use;
+   - `data_model_to_pymcell`, on the data model's mesh in µm
+     (`utils/data_model_to_pymcell/data_model_geometry.cpp:51-62`).
+4. **Mesh checks** (§6.5).
+   - `MeshUtils::check_meshes` (`src4/mesh_utils.cpp:283`) runs from `World::init_simulation`,
+     right after the counted volumes are set up (`world.cpp:275`). So the Python API and MDL models
+     on the MCell4 engine share it.
+   - `check_release_regions` (`mesh_utils.cpp:277`) covers a release made after the initialization
+     (`libmcell/api/model.cpp:234`).
+   - `World::checked_meshes` (`src4/world.h:260`) records what was already reported, so each
+     warning is printed once.
+5. **Non-manifold check of every Python API object.** `MCell4Converter::convert_geometry_objects`
+   raises `ValueError` before it links the walls (`mcell4_converter.cpp:939-941`). MDL models are
+   not checked there.
+6. **OBJ export.** `World::export_geometry_to_obj` (`world.cpp:722`) calls
+   `export_geometry_objects_to_obj` (`counted_volume_utils.cpp:375`), which calls
+   `GeometryAnalysis::write_obj`. The output has one named object per geometry object, in µm, each
+   with a white material of opacity 0.25.
 
-| VTK class | VTK module | Representative file:line | Purpose in MCell |
+### 6.3 `GeometryAnalysis`: function → what it does → used by
+
+| Function (`geometry_analysis.h`) | What it does | Used by |
+|---|---|---|
+| `clean_mesh` (`:50`) | Merges exactly equal points (0.0 equals −0.0). Numbers the points in the order the triangles first use them. Drops unused points and triangles that use a point twice. | the counted volumes, the compartments, the checks, `data_model_to_pymcell` |
+| `is_closed` (`:54`) | Every edge belongs to exactly two triangles. | the BNGL export volume |
+| `is_watertight` (`:58`) | No edge belongs to only one triangle. | the counted volumes, the compartments, check D, `data_model_to_pymcell` |
+| `has_non_manifold_edge` (`:62`) | Some edge belongs to three or more triangles. | the counted volumes, the compartments, the API check, `data_model_to_pymcell` |
+| `count_inconsistent_edges` (`:67`) | Counts the edges whose two triangles both run along the edge in the same direction. | check A |
+| `count_duplicate_points` (`:71`) | Counts the points equal to an earlier point. | check C |
+| `find_inside_out_parts` (`:86`) | Finds the connected components that face the wrong way for their nesting (a cavity must face inward). | check B1 |
+| `volume_and_area` (`:100`) | Signed volume and area, computed as the simulation computes them (§6.4). | `Region`, the BNGL export, `data_model_to_pymcell`, check B2 |
+| `triangles_intersect` (`:103`) | Tells exactly whether two closed triangles share a point. It uses Guigue–Devillers on the predicates (`geometry_analysis.cpp:371`). | `containment` |
+| `Solid` (`:125`) | A mesh prepared for containment tests: a bounding-volume hierarchy of its triangles, plus its connected components. | the counted volumes, the compartments |
+| `point_in_solid` (`:115`) | Returns `Outside`, `Inside`, `OnSurface` or `Undecided`. An exact on-surface test comes first; then the parity of the crossings along a ray decides. A ray that grazes an edge or a vertex is replaced by another direction (`geometry_analysis.cpp:872`). | `containment` |
+| `containment` (`:122`) | Returns `Disjoint`, `Identical`, `Intersect`, `FirstInSecond` or `SecondInFirst` (`geometry_analysis.cpp:1234`; rule in §6.4). | the counted volumes, the compartments |
+| `number_to_string` (`:144`) | The shortest text that reads back as the same double (`std::to_chars`), in `vtkNumberToString`'s notation. | the OBJ export |
+| `write_obj` (`:154`) | Writes `<prefix>.obj` and `<prefix>.mtl` with the bytes MCell's patched `vtkOBJExporter` wrote, except for the coordinates, which are written as doubles. | the OBJ export |
+
+### 6.4 Definitions that matter
+
+- **Precision.** Computation and output use double everywhere. Every decision (closed, touching,
+  inside) takes its signs from the exact predicates. Decisions are therefore exact as long as no
+  intermediate product underflows or overflows: coordinate differences between about 1e-80 and
+  1e80, or zero (`geometry_analysis.h:15-23`).
+- **Edges are matched by exact coordinates** after `clean_mesh`; vertex indices play no part. MCell
+  links walls the same way: `compatible_edges` accepts the same vertex or exactly equal coordinates
+  (`src4/geometry.cpp:51`, `:93-96`). So two walls that use different copies of the same vertex are
+  joined there, and check C warns about such copies.
+- **Closed** means that every edge belongs to exactly two triangles. That one definition holds for
+  counted objects, compartments, the BNGL export and `data_model_to_pymcell`.
+  - A *non-manifold edge* (three or more triangles) is reported before an *open* one (one
+    triangle).
+  - An open surface (a manifold with boundary) is fine in a simulation. Only counting inside it, or
+    releasing into it, has no meaning.
+- **Volume and area.**
+  - The volume is `Region`'s formula: the sum of the signed volumes of the tetrahedra that join
+    each triangle to the center of the triangles' bounding box. The triangles are used as given and
+    in order, without cleaning or reorientation.
+  - The area is the sum of `0.5 |(b − a) × (c − a)|` over the triangles, as in
+    `Wall::precompute_wall_constants` (`src4/wall.cpp:304`).
+  - An inside-out mesh has a negative volume. VTK reported the absolute value.
+- **Containment rule** (the same as the former VTK code):
+  - surfaces that touch or cross are `Identical` when their point lists are equal, and `Intersect`
+    otherwise;
+  - otherwise the first solid is inside the second when any of its connected components is inside.
+    One point decides for each component, since the surfaces don't touch;
+  - failing that, the same test runs the other way round; if neither holds, the solids are
+    `Disjoint`.
+- **No floating-point contraction** in `predicates.cpp` and `geometry_analysis.cpp` (§6.6). Fused
+  multiply-add breaks the predicates' error-free arithmetic, and it would change the volume's last
+  bits from one platform to another.
+
+### 6.5 Errors and warnings that users see
+
+**Errors**, which stop the run (or raise an exception in Python):
+
+| Case | Message | Where it can occur |
+|---|---|---|
+| a counted object (`counted_volume_utils.cpp:60`, `:64`) | "Non-manifold mesh is not allowed, error for <name>.", otherwise "Counting inside an open surface is not possible, error for <name>.", then "Processing of counted volumes failed, terminating." | Python API. MDL on the MCell4 engine too, but there MCell3's check runs first (`src/count_util.c:1421`) and stops open counted objects, so MDL gets only the non-manifold error, for an edge with an even number of walls. |
+| two identical counted objects (`counted_volume_utils.cpp:123`) | "Identical counted objects are not supported yet, error for <A> and <B>." (printed as a warning), then the same stop | every front end |
+| any Python API object (`mcell4_converter.cpp:940`) | `ValueError`: "Non-manifold mesh is not allowed, error for <name>." | Python API, including data model → Python |
+| a BNGL compartment (`compartment_utils.cpp:59`, `:62`, `:108`, `:130`) | `RuntimeError`: the non-manifold message, otherwise "Compartment object must be closed, error for <name>."; also intersecting compartments, and a compartment with several parents | Python API with BNGL compartments |
+
+Other messages:
+- The BNGL export returns "Compartment object <name> is not watertight and its volume cannot be
+  computed." (`bngl_exporter.cpp:101`, `:210`).
+- `data_model_to_pymcell` prints "Warning: could not compute volume of a geometry object: …" with the
+  non-manifold or not-watertight message, and writes a fallback value
+  (`data_model_geometry.cpp:53`, `:56`; `bngl_generator.cpp:239`).
+- A failed OBJ write prints "Could not write geometry to <prefix>.obj and <prefix>.mtl.", and the run
+  continues (`counted_volume_utils.cpp:386`).
+
+**Warnings**, after which the run continues, come from `MeshUtils` (`src4/mesh_utils.cpp:14-41`, texts
+at `:113-275`).
+- Each problem gives one line through `mcell_warn` (stderr): `Warning: [CODE] name: text`.
+- Scripts can parse it with `^Warning: \[([A-Z_]+)\] (\S+): (.*)$`.
+- The name is the geometry object's name as MCell has it (`Scene.box` for MDL).
+
+| Check | Code | Applies to | Fires when |
 |---|---|---|---|
-| `vtkSmartPointer` | **CommonCore** | `vtk_utils.h:58`; `vtk_utils.cpp:71` | reference-counted ownership of all VTK objects |
-| `vtkPolyData` | **CommonDataModel** | `vtk_utils.h:58`; `vtk_utils.cpp:121` | triangle-mesh representation of each geometry object |
-| `vtkPoints` | **CommonDataModel** | `vtk_utils.cpp:78`; `compartment_utils.cpp:44` | mesh vertex storage / vertex comparison |
-| `vtkCellArray` | **CommonDataModel** | `vtk_utils.cpp:79` | triangle connectivity |
-| `vtkTriangle` | **CommonDataModel** | `vtk_utils.cpp:111` | one triangle per MCell wall |
-| `vtkPointData` | **CommonDataModel** | `vtk_utils.cpp:174` | read "SelectedPoints" array from enclosed-points output |
-| `vtkDataArray` | **CommonDataModel** | `vtk_utils.cpp:173,176` | per-point inside/outside flags |
-| `vtkMatrix4x4` | CommonMath (transitive) | `vtk_utils.cpp:226,234` | identity transform fed to collision filter |
-| `vtkTransform` | **CommonTransforms** | `vtk_utils.cpp:227,231` | identity transform for collision detection |
-| `vtkTriangleFilter` | **FiltersCore** | `vtk_utils.cpp:126,608` | triangulate polys before cleaning / volume calc |
-| `vtkCleanPolyData` | **FiltersCore** | `vtk_utils.cpp:128` | merge duplicate points / clean mesh |
-| `vtkMassProperties` | **FiltersCore** | `vtk_utils.cpp:619` | compute object volume (`GetVolume()`) |
-| `vtkFeatureEdges` | **FiltersCore** | `vtk_utils.cpp:584` | watertight check (count boundary edges) |
-| `vtkPolyDataNormals` | **FiltersCore** | `vtk_utils.cpp:613` | consistent winding before mass properties |
-| `vtkCollisionDetectionFilter` | **FiltersModeling** | `vtk_utils.cpp:228` | detect whether two meshes collide/intersect |
-| `vtkSelectEnclosedPoints` | **FiltersModeling** | `vtk_utils.cpp:146,167,222`; `compartment_utils.cpp:81` | enclosed-point test → counted-volume/compartment membership; surface-closure validation |
-| `vtkPlatonicSolidSource` | **FiltersSources** | `geometry_utils.cpp:21` (include only) | requested by CMake; **not actually instantiated** (see §6.4) |
-| `vtkOBJExporter` | **IOExport** | `vtk_utils.cpp:661` | export meshes to Wavefront OBJ |
-| `vtkRenderer` | **RenderingCore** | `vtk_utils.cpp:631` | scene graph required by the OBJ exporter |
-| `vtkRenderWindow` | **RenderingCore** | `vtk_utils.cpp:658` | render window the exporter reads from |
-| `vtkPolyDataMapper` | **RenderingCore** | `vtk_utils.cpp:639` | map polydata into the export pipeline |
-| `vtkActor` | **RenderingCore** | `vtk_utils.cpp:642` | one actor per exported object |
-| `vtkProperty` | **RenderingCore** | `vtk_utils.cpp:647` | export material (white, 0.25 opacity) |
+| A | `MESH_INCONSISTENT_ORIENTATION` | counted objects, compartments, objects whose volume a release by concentration uses | two walls run along their shared edge in the same direction |
+| B1 | `MESH_INSIDE_OUT` | counted objects, compartments | a closed part faces the wrong way for its nesting. The text gives the signed volume. |
+| B2 | `MESH_INSIDE_OUT` | a release by concentration into one object | the object's signed volume is negative. The run then stops with the release's INT_MAX error. |
+| C | `MESH_DUPLICATE_VERTICES` | every object | two vertices used by walls have exactly the same coordinates |
+| D | `REGION_NOT_CLOSED` | releases of volume molecules into a region | an object of the region has an edge of only one wall |
 
-> Note: the RenderingCore classes are used **only** to feed `vtkOBJExporter` (it needs a
-> renderer/render-window scene graph) — MCell never opens a window.
+For MDL models, MCell3 stops open or inconsistently oriented counted objects and release regions
+before the conversion (`src/count_util.c:1421`, `src/init.c:3595`, `:3625`), so only B and C can
+appear there. Bow-tie and pinched vertices are not checked yet (doc 07).
 
-### 6.4 Caveats / dead code
+### 6.6 Build
 
-- **`vtkPlatonicSolidSource` is effectively dead.** `geometry_utils.cpp:21` includes the
-  header, but `create_box`/`create_icosphere` build meshes by hand from hard-coded
-  vertex/wall lists. The only VTK *source* instantiation (`vtkSphereSource` in
-  `create_sphere`) sits inside an `#if 0` block. So FiltersSources is linked but unused
-  at runtime.
-- **`vtkBooleanOperationPolyDataFilter`** (`vtk_utils.cpp:272`) is `#if 0` — a
-  placeholder for future intersection-volume computation (would pull in FiltersGeneral).
-- `is_point_inside_counted_volume` (`vtk_utils.cpp:557`) is also disabled (`#if 0`).
+- **The library** (`src4/CMakeLists.txt:42-101`). `GEOMETRY_SOURCE_FILES`
+  (`src4/CMakeLists.txt:44-47`: `predicates.cpp`, `geometry_analysis.cpp`) make up the static
+  library `mcell_geometry`, alias `MCell::geometry` (`:91-95`). `mcell4` links it publicly
+  (`:101`). `libmcell` (`libmcell/CMakeLists.txt:157`) and `data_model_to_pymcell`
+  (`utils/data_model_to_pymcell/CMakeLists.txt:28`) link it privately.
+- **Per-file flags**, all in `src4/CMakeLists.txt`:
+  - The new `.cpp` files are compiled as C++23 (`MCELL_CXX23`, `src4/CMakeLists.txt:54-58`):
+    `-std=gnu++2b`, or `/std:c++latest` under an MSVC-style front end. The rest of MCell is C++17,
+    and the new headers stay valid C++17.
+  - `predicates.cpp` and `geometry_analysis.cpp` are compiled without floating-point contraction
+    (`MCELL_NO_FP_CONTRACTION`, `src4/CMakeLists.txt:67-75`): `-ffp-contract=off`; `/fp:precise`
+    for MSVC; `/clang:-ffp-contract=off` for clang-cl, which contracts even with `/fp:precise`.
+  - `mesh_utils.cpp` includes glm through MCell's headers, so glm's deprecated-volatile warning is
+    switched off for it (`MCELL_CXX23_GLM`, `src4/CMakeLists.txt:81-89`).
+- **Platform floor:** GCC 11+, MSVC 2022, or Xcode 15+ on macOS 13.3+. This comes from
+  `std::to_chars` for double, `std::ranges` and `std::bit_cast`. MCell sets no
+  `CMAKE_OSX_DEPLOYMENT_TARGET`.
+- **No VTK anywhere.** There is no `find_package(VTK)`, no `${VTK_LIBRARIES}` and no
+  `vtk_module_autoinit`. `mcell_tools` (branch `mcell4_nanobind`) has no VTK build step (doc 05).
 
-### 6.5 CMake wiring
+### 6.7 Tests that exercise it
 
-VTK modules are requested once (`CMakeLists.txt:44-52`); `${VTK_LIBRARIES}` is linked into
-`src4` (`src4/CMakeLists.txt:69`), `libmcell`, and both the `mcell` executable and
-`mcell4_so` module (`CMakeLists.txt:544,555`). `vtk_module_autoinit`
-(`CMakeLists.txt` ~602-604) registers VTK 9 object factories so the renderer/exporter
-classes resolve at runtime. `VTK_DIR` points at the locally built VTK in
-`../mcell_tools/work/build_vtk` (`CMakeLists.txt:39`).
+- `mcell_tests` `tests/pymcell4_positive/3100_export_geometry_obj` and
+  `3120_dyn_geom_export_geometry_obj` compare the exported OBJ files byte for byte with their
+  references.
+- `tests/pymcell4_positive/2610_count_in_intersecting_objects_w_parent` counts inside counted
+  objects that intersect and have a parent. After every iteration it compares the counts with the
+  counts from the molecules' positions. It needs no reference data.
+- The BNGL export tests (`test_configs/bngl_to_pymcell4_export.toml`) write each volume into
+  `exported.bngl` with 17 digits, then run the exported model again.
+- Every test that counts inside objects, releases by concentration, or uses BNGL compartments goes
+  through §6.2.
 
 ---
 
@@ -659,9 +768,9 @@ positional argument is the MDL filename (`:381-406`).
 `NB_MODULE(mcell, m)` is defined in `libmcell/api/bindings.cpp:176`; the module's
 import name is **`mcell`**. The CMake target is `mcell4_so`
 (`nanobind_add_module(mcell4_so ... libmcell/api/exports.cpp)`,
-`CMakeLists.txt:512`), with its output name forced to `mcell` and suffix `.so`/`.pyd`
-(`:588-594`). This module links `MCell::libmcell` + `nanobind-static` + `MCell::mcell4`
-(the same engine the executable uses) plus BNG/JsonCpp/Nauty/VTK (`:578-584`). The binding details
+`mcell/CMakeLists.txt:488`), with its output name forced to `mcell` and suffix `.so`/`.pyd`
+(`:564-570`). This module links `MCell::libmcell` + `nanobind-static` + `MCell::mcell4`
+(the same engine the executable uses, with `MCell::geometry`, §6.6) plus BNG/JsonCpp/Nauty (`:554-560`). The binding details
 (`define_pybinding_*`, code-generated wrappers) are covered by the libmcell document — for
 this reference it is enough to note that `mcell4_so` is the Python entry point and drives
 the *same* MCell4 `World` engine, just constructed directly from the Python API instead of
