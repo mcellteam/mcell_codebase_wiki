@@ -9,7 +9,7 @@ points here; this file holds the substance.
 
 The wiki carries **no machine-specific absolute paths**. Every source citation in every doc is
 written **relative to a single anchor, `$ROOT`** — the **MCell build root**, the directory that
-holds the sibling repos (`mcell/`, `libbng/`, `nfsim/`, `nfsimCInterface/`, `VTK/`, `mcell_tools/`,
+holds the sibling repos (`mcell/`, `libbng/`, `nfsim/`, `nfsimCInterface/`, `mcell_tools/`,
 `mcell_python/`) **and** this `mcell_codebase_wiki/` folder. A citation like `mcell/src4/world.h:120`
 means `$ROOT/mcell/src4/world.h`.
 
@@ -29,7 +29,7 @@ this file.
 ## What this tree is
 
 `$ROOT` is the MCell build root: the MCell source (`mcell/`) plus its sibling dependency
-repos (`libbng/`, `nfsim/`, `nfsimCInterface/`, `VTK/`), the build orchestrator (`mcell_tools/`),
+repos (`libbng/`, `nfsim/`, `nfsimCInterface/`), the build orchestrator (`mcell_tools/`),
 and the runtime Python env (`mcell_python/`, a `uv` project on a statically-built Python 3.13).
 The root itself is **not** a git repo; each sub-project is its own repo. This wiki folder is one
 too: a **local** git repo (branch `main`, no remote), so wiki edits show up in its own
@@ -49,8 +49,9 @@ nanobind — migrated from pybind11, doc 06). Both converge on the **MCell4** C+
 
 Entry point: **`mcell_codebase_wiki/00_overview.md`** (architecture, build graph, integration map,
 reading guide). Then `01_libbng.md`, `02_nfsim.md`, `03_nfsimCInterface.md`,
-`04_mcell_core_and_dependencies.md` (engines + main loop + VTK usage),
-`05_mcell_python_api_and_build.md` (YAML→nanobind codegen + build + static-Py/uv). Every doc
+`04_mcell_core_and_dependencies.md` (engines + main loop + geometry analysis),
+`05_mcell_python_api_and_build.md` (YAML→nanobind codegen + build + static-Py/uv); `06` and
+`07_vtk_removal.md` record the nanobind migration and the VTK removal. Every doc
 carries `file_path:line` citations. **Prefer reading the relevant wiki doc before re-deriving
 structure from source.**
 
@@ -63,8 +64,11 @@ Key facts worth holding (details + citations in the wiki):
   `mcell/libmcell/generated/gen_*.{h,cpp}` + `mcell.pyi`. Regenerate with
   `cd mcell/libmcell/definition && python3 gen.py` (NOT a CMake step). Never hand-edit
   `generated/`; behavior subclasses live in `libmcell/api/` (`X : public GenX`).
-- **VTK** is built out-of-tree by `mcell_tools` (`work/build_vtk`), consumed via `find_package`;
-  only 8 modules, only for geometry analysis + OBJ export.
+- **No VTK.** Geometry analysis is in-tree and has no external dependency: counted volumes,
+  compartment nesting, closedness, volumes, the parsable mesh-check warnings and the OBJ export.
+  It lives in `MCell::geometry` (exact predicates + `GeometryAnalysis`), `MeshUtils` and
+  `CountedVolumeUtils`. The geometry files are C++23 and built without FP contraction (doc 04 §6;
+  history: doc 07).
 - **Gotchas:** gcc-8.3.0 is hard-blocked (segfaults NFsim); nauty must stay static + C++-compiled
   or `mcell.so` fails to link; the BNGL parser is non-reentrant; `find_package(Python3 3.13 EXACT)`.
 

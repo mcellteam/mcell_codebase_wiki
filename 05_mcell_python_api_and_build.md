@@ -28,7 +28,7 @@ api/<class>.{h,cpp}  (hand-written  class X : public GenX  subclasses)
 CMake (mcell/CMakeLists.txt)  ──nanobind_add_module──▶  lib/mcell.so   (target mcell4_so)
                               ──add_executable──────▶  mcell           (CLI binary)
 
-mcell_tools/run.py ▶ build.py ▶ {build VTK, cmake+make mcell, bundle}
+mcell_tools/run.py ▶ build.py ▶ {cmake+make mcell, bundle}
 ```
 
 ---
@@ -399,8 +399,11 @@ imports `repositories`, `build`, `bundle`, `cmake_builder`, `Options`,
    or the cellblender-plugin / pypi-wheel variants (`run.py:127`).
 6. **Phase 4 — test** — shells out to `mcell_tests/run_tests.py` (`run.py:144`).
 
-`build.build_all` (`build.py:229`) order: **`build_vtk` first** (`build.py:232`),
-then `build_mcell` (`build.py:234`), then cellblender, then mesh_tools.
+`build.build_all` (`build.py:169`) order: `build_mcell` (`build.py:172`), then
+cellblender (`:177`), then mesh_tools (`:181`, not on Windows). There is no VTK step:
+MCell has no VTK dependency since the VTK removal (doc 04 §6, doc 07), and the
+`mcell_tools` branch `mcell4_nanobind` has no `build_vtk`. (`mcell4_dev` still builds
+VTK first, for the roots whose MCell still uses it.)
 
 ## 5b. The CMake driver
 
@@ -425,31 +428,28 @@ ALL_BUILD --config Release -j N` on Windows (`build.py:17`). `-DPYTHON_VERSION` 
 only passed when `--mcell-python` is given; otherwise the CMake default of `3.13`
 applies (§7).
 
-## 5c. Directory layout under `work/` & VTK handoff
+## 5c. Directory layout under `work/`
 
-`opts.work_dir = <root>/mcell_tools/work` (`options.py:61`). Path constants
-(`build_settings.py:53-61`):
+`opts.work_dir = <root>/mcell_tools/work` (`options.py:62`). Path constants
+(`build_settings.py:52-54`, `:142`):
 
 | Constant | Path | Purpose |
 |---|---|---|
-| `BUILD_DIR_VTK` | `work/build_vtk` | static VTK build |
 | `BUILD_DIR_MCELL` | `work/build_mcell` | mcell/module build tree |
 | `BUILD_DIR_MCELL_PYPI` | `work/build_mcell_pypi` | wheel-only build |
 | `BUILD_DIR_CELLBLENDER` | `work/build_cellblender` | cellblender |
 | `TEST_BUNDLE_DIR` | `work/bundle_install` | bundle re-extracted for tests |
 
-`build_vtk` (`build.py:169`) builds VTK **static** (`-DBUILD_SHARED_LIBS=OFF`,
-`-DVTK_BUILD_ALL_MODULES=OFF` + a curated module allowlist) into `work/build_vtk`.
-The handoff is **not** via a cmake arg — the mcell `CMakeLists.txt:32` hardcodes
-`set(VTK_DIR ${CMAKE_SOURCE_DIR}/../mcell_tools/work/build_vtk)` and then
-`find_package(VTK REQUIRED COMPONENTS …)` consumes that prebuilt tree. This is why
-VTK must be built before mcell.
+Until the VTK removal, `build_vtk` built a static VTK into `work/build_vtk`, and
+`mcell/CMakeLists.txt` found it through a hard-coded `VTK_DIR`. Neither exists any
+more (doc 07).
 
 ## 5d. `repositories.py`
 
 Base URL `https://github.com/mcellteam/` (or SSH for `*.salk.edu` hosts).
 `BASE_REPOSITORIES` (`repositories.py:27`): `mcell`, `libbng`, `cellblender`,
-`mcell_tests`, `mcell_tools`, `neuropil_tools`, `mesh_tools`, `VTK`.
+`mcell_tests`, `mcell_tools`, `neuropil_tools`, `mesh_tools` (`VTK` was dropped
+with the VTK removal).
 `FORKED_REPOSITORIES`: `nfsim`, `nfsimCInterface`, `bionetgen`, `gamer`.
 Default branch `master` (or `mcell4_dev` for `mcell4*` branches,
 `build_settings.py:24`). **nanobind and jsoncpp are NOT separate repos** — they
@@ -473,38 +473,41 @@ optionally gamer, drops in the version file, and archives (`zip` on macOS/Window
 `mcell/CMakeLists.txt` (project `mcell`) orchestrates the whole native build.
 Build-orchestration view (dep internals are covered in the libbng/nfsim docs):
 
-- **Python & VTK discovery** — `find_package(Python3 … EXACT)` (`:10`) and, for
+- **Python discovery** — `find_package(Python3 … EXACT)` (`:10`) and, for
   nanobind, a capital-P `find_package(Python … EXACT)` pinned to the same
-  interpreter (`set(Python_EXECUTABLE ${Python3_EXECUTABLE})`, `:371-372`);
-  `set(VTK_DIR …/work/build_vtk)` + `find_package(VTK …)` (`:32-52`);
-  `find_package(nanobind CONFIG)` against the vendored `libs/nanobind` (`:374`).
+  interpreter (`set(Python_EXECUTABLE ${Python3_EXECUTABLE})`, `:347-348`);
+  `find_package(nanobind CONFIG)` against the vendored `libs/nanobind` (`:350`).
+  There is no `find_package(VTK)`: the geometry analysis that replaced VTK is
+  in-tree (doc 04 §6).
 - **Bundled subdirectories** via `add_subdirectory`:
-  `libs/jsoncpp` (`:71`), sibling `../libbng` (`:376`), `../nfsim` (`:378`),
-  `../nfsimCInterface` (`:379`), `libmcell` (`:381`), `src4` (`:382`). Plus
-  `utils/data_model_to_pymcell` and `utils/` (`:574-575`). nanobind is **not** an
+  `libs/jsoncpp` (`:48`), sibling `../libbng` (`:352`), `../nfsim` (`:354`),
+  `../nfsimCInterface` (`:355`), `libmcell` (`:357`), `src4` (`:358`). Plus
+  `utils/data_model_to_pymcell` and `utils/` (`:550-551`). nanobind is **not** an
   `add_subdirectory` — it comes in via `find_package` above (`libs/pybind11` was
   removed in the migration). nanobind's include dirs are added to
-  `mcell_project_options` (`:161`).
+  `mcell_project_options` (`:138`).
 - **Shared flags** — a single `mcell_project_options` INTERFACE target
-  (`:96-152`) carries the C++ standard (`MCELL_CXX_STANDARD`, default 17),
+  (`:73-131`) carries the C++ standard (`MCELL_CXX_STANDARD`, default 17),
   warnings, `-fpermissive`, optimization, and `-DPYTHON_VERSION=…`; linked
-  `PRIVATE` into every first-party + bundled target (`:574-583`).
+  `PRIVATE` into every first-party + bundled target, `mcell_geometry` included
+  (`:578-587`). The geometry files add per-file flags on top: C++23 and no
+  floating-point contraction (`src4/CMakeLists.txt:42-89`, doc 04 §6.6).
 - **Code-gen at configure time** — flex/bison for the MDL parser/scanner
-  (`:312-331`), `version.h`/`version_flags.h` generation (`:288-349`).
+  (`:297-317`), `version_flags.h` (`:244-283`) and `version.h` (`:321-335`) generation.
 - **Two binary targets:**
-  - **`mcell`** executable (`add_executable`, `:533`) — the standalone MDL-based
+  - **`mcell`** executable (`add_executable`, `:509`) — the standalone MDL-based
     CLI, forced to the build root, links
-    `MCell::mcell4 MCell::libmcell_dummy BNG::bng NFsimC NFsim JsonCpp Nauty
-    ${VTK_LIBRARIES}` (`:556`). On **macOS** it does not link the static Python lib —
+    `MCell::mcell4 MCell::libmcell_dummy BNG::bng NFsimC::NFsimC NFsim::NFsim
+    JsonCpp::JsonCpp Nauty::nauty` (`:532-543`); `MCell::mcell4` brings the static
+    geometry library `MCell::geometry` with it. On **macOS** it does not link the static Python lib —
     Python C-API symbols are left undefined and resolved at runtime via
-    `target_link_options(mcell PRIVATE …-undefined,dynamic_lookup)` (`:572`, the
+    `target_link_options(mcell PRIVATE …-undefined,dynamic_lookup)` (`:548`, the
     direct replacement for the old `pybind11::python_link_helper`). On **Windows**
     it (and `data_model_to_pymcell`) must additionally link `nanobind-static`
-    (`:566`) — MSVC resolves every external when linking an executable.
-  - **`mcell4_so`** module (`nanobind_add_module`, `:512`) — the Python `.so`,
-    links `MCell::libmcell` (twice, for link-ordering, `:578-584`) + `nanobind-static`
-    + `mcell4` + deps + VTK.
-- **VTK autoinit** for all VTK-using targets (`vtk_module_autoinit`, `:602`).
+    (`:542`) — MSVC resolves every external when linking an executable.
+  - **`mcell4_so`** module (`nanobind_add_module`, `:488`) — the Python `.so`,
+    links `MCell::libmcell` (twice, for link-ordering, `:554-560`) + `nanobind-static`
+    + `mcell4` (with `MCell::geometry`) + deps.
 
 ## 7. Static Python 3.13 + `uv`
 
@@ -637,7 +640,7 @@ generated API, not part of the codegen/module-build path.
 ```bash
 cd mcell/libmcell/definition && python3 gen.py        # writes ../generated/*, ../work/*, ../documentation/generated/*
 ```
-**Build everything (repos + VTK + mcell + module):**
+**Build everything (repos + mcell + module):**
 ```bash
 cd mcell_tools && python3 run.py                      # default = repos + build
 python3 run.py -2 -d                                  # build only, Debug

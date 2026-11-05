@@ -2,17 +2,18 @@
 
 A maintainer-oriented **codebase wiki** for [MCell](https://github.com/mcellteam/mcell)
 ("Monte Carlo Cell", [mcell.org](https://mcell.org)) — the 3-D, particle-based spatial
-reaction–diffusion simulator — together with its bundled C/C++ dependencies, its VTK usage, and its
-code-generated Python API.
+reaction–diffusion simulator — together with its bundled C/C++ dependencies, its in-tree geometry
+analysis (which replaced VTK), and its code-generated Python API.
 
 It maps how the tree is structured: the two engines (legacy MCell3 in `src/`, the MCell4 C++ engine
-in `src4/`) and the MCell4 main loop; how the engine consumes libbng, NFsim (through
-nfsimCInterface), and VTK; the YAML→C++/nanobind code generation behind `import mcell`; and the
+in `src4/`) and the MCell4 main loop; how the engine consumes libbng and NFsim (through
+nfsimCInterface), and its geometry analysis; the YAML→C++/nanobind code generation behind `import mcell`; and the
 `mcell_tools` build — so you don't have to re-read the whole tree each time. Every doc carries
 `file_path:line` citations into the real source.
 
-Docs 00–05 were produced by a multi-agent mapping pass (one agent per domain document); 06 and the
-design/TODO notes record later work, chiefly the pybind11→nanobind migration. The wiki is kept in
+Docs 00–05 were produced by a multi-agent mapping pass (one agent per domain document); 06, 07 and
+the design/TODO notes record later work: the pybind11→nanobind migration (06) and the VTK removal
+(07). The wiki is kept in
 sync with the code via the maintenance workflow below.
 
 ## Documents
@@ -26,9 +27,10 @@ reading guide (with suggested entry paths by task).
 | 01 | [`01_libbng.md`](01_libbng.md) | **libbng** — the BioNetGen-Language library (`BNG::`): species/complex graphs, rule application, BNGL parser, nauty canonicalization |
 | 02 | [`02_nfsim.md`](02_nfsim.md) | **NFsim** — the network-free stochastic simulator (vendored C++ engine) |
 | 03 | [`03_nfsimCInterface.md`](03_nfsimCInterface.md) | **nfsimCInterface** — the `extern "C"` bridge MCell3 uses to drive NFsim |
-| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, entry points, and how libbng / NFsim / VTK are consumed |
+| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, entry points, how libbng / NFsim are consumed, and the in-tree geometry analysis that replaced VTK (§6) |
 | 05 | [`05_mcell_python_api_and_build.md`](05_mcell_python_api_and_build.md) | **Python API & build** — the YAML→C++/nanobind codegen, `mcell_tools` orchestration, the CMake build graph, static Python 3.13 + `uv` |
 | 06 | [`06_nanobind_migration_feasibility.md`](06_nanobind_migration_feasibility.md) | **pybind11→nanobind migration** — the feasibility study and the executed, validated port (Linux/macOS/Windows; `libs/pybind11` removed) |
+| 07 | [`07_vtk_removal.md`](07_vtk_removal.md) | **The VTK removal** (2026) — why VTK went, the decisions, what changed for users, how it was checked, the numbers |
 
 Notes:
 - [`DESIGN_geometry_vec3_representation.md`](DESIGN_geometry_vec3_representation.md) — design
@@ -60,7 +62,6 @@ $ROOT/
 ├── libbng/                # doc 01
 ├── nfsim/                 # doc 02
 ├── nfsimCInterface/       # doc 03
-├── VTK/                   # doc 04 §6 (built out-of-tree by mcell_tools)
 ├── mcell_tools/           # build orchestrator — doc 05 §5
 ├── mcell_python/          # runtime Python env — from $ROOT: source mcell_python/.venv/bin/activate (doc 05 §7)
 ├── …                      # other repos mcell_tools checks out (mcell_tests, cellblender, …)
@@ -101,4 +102,5 @@ conservative — see the caveat in [`CLAUDE.md`](CLAUDE.md).
 ## License
 
 The wiki documents the MCell source and its dependencies, each under its own license: MCell,
-libbng, NFsim, nfsimCInterface, and mcell_tools are MIT-licensed; VTK is BSD-3-Clause.
+libbng, NFsim, nfsimCInterface, and mcell_tools are MIT-licensed. MCell's geometry analysis includes a
+port of Jonathan Shewchuk's public-domain exact predicates (doc 04 §6).

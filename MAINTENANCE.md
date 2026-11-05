@@ -36,11 +36,11 @@ Find the area you touched on the left; update the doc(s) on the right.
 | `nfsimCInterface/src/` (the `extern "C"` functions, structs) | **03** + **04 §NFsim** + **00 §5.2** | the C boundary is cited from all three |
 | `mcell/src4/` (MCell4 engine: World, Scheduler, events, `.inl`, geometry) | **04** (+ **00 §2/§5** if the architecture/main loop changes) | this is the engine doc |
 | `mcell/src/` (MCell3, MDL parser, `*nfsim*.c`, `mcell.c`, `init.c`) | **04** (legacy-path + entry-point sections) | MCell3 front-end lives here |
-| `mcell/src4/vtk_utils.*` or any VTK use; VTK module list in `mcell/CMakeLists.txt` | **04 §VTK** + **00 §4 "VTK"** | the VTK-usage reference is in 04, summarized in 00 |
+| `mcell/src4/{predicates,geometry_analysis,mesh_utils,counted_volume_utils}.*` (geometry analysis, mesh-check warnings, counted volumes, OBJ export) or their per-file flags in `src4/CMakeLists.txt` | **04 §6** + **00 §4 "Geometry analysis"** | the reference is 04 §6, summarized in 00; 07 is the record of the VTK removal (correct it, don't extend it) |
 | `mcell/libmcell/definition/*.yaml`, `gen.py`, `constants.py`, `doc.py` | **05 Part A** (+ **00 §5.3/§6**) | the codegen schema/flow doc |
 | `mcell/libmcell/api/*` (hand-written API subclasses, `bindings.cpp`, `exports.cpp`) | **05 Part A** (generated↔handwritten split, module assembly) | the inheritance/binding pattern |
 | `mcell/CMakeLists.txt`, `mcell/libmcell/CMakeLists.txt`, `src4/CMakeLists.txt` | **00 §3 (build graph)** + **05 Part B** + the affected dep doc | the build graph is described in 00 and 05 |
-| `mcell_tools/` (`run.py`, `scripts/*.py`) or the VTK build path | **05 Part B** | build orchestration |
+| `mcell_tools/` (`run.py`, `scripts/*.py`) | **05 Part B** | build orchestration |
 | `mcell_python/` (`pyproject.toml`, `.python-version`, deps) or the Python version | **05 Part B (static Py / uv)** + **00 §7 (version coupling)** | runtime env + the `Python3 EXACT` coupling |
 | Added/removed a top-level dependency or subdir | **00 §3, §4** + a **new `NN_<dep>.md`** + add it to the **§1 index table** | the integration map is the source of truth for "what's wired in" |
 
@@ -102,11 +102,13 @@ A quick sanity sweep to catch the most likely staleness:
 - [ ] **Build graph matches CMake.** Diff **00 §3** against the current `add_subdirectory` /
       `target_link_libraries` lines in `mcell/CMakeLists.txt`.
 - [ ] **CMake target names match.** The alias targets (`BNG::bng`, `NFsim::NFsim`,
-      `NFsimC::NFsimC`, `MCell::mcell4`, `MCell::libmcell`) named across the docs still exist.
+      `NFsimC::NFsimC`, `MCell::mcell4`, `MCell::libmcell`, `MCell::geometry`) named across the
+      docs still exist.
 - [ ] **API class list matches generated/.** `ls mcell/libmcell/generated/gen_*.h` vs the classes
       doc 05 enumerates.
-- [ ] **VTK module list matches.** The 8 modules in **00 §4 / 04 §VTK** vs the
-      `find_package(VTK … COMPONENTS …)` block in `mcell/CMakeLists.txt`.
+- [ ] **Geometry build flags match.** The `MCell::geometry` library and the per-file flags in
+      **04 §6.6** (`MCELL_CXX23`, `MCELL_NO_FP_CONTRACTION`, `MCELL_CXX23_GLM`) vs
+      `src4/CMakeLists.txt`.
 - [ ] **Python version.** `mcell_python/.python-version` and `find_package(Python3 … EXACT)` still
       agree with what **05** states.
 

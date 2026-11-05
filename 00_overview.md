@@ -1,14 +1,15 @@
 # MCell Codebase Wiki — Overview & Integration Map
 
 > **Audience:** maintainers and developers of MCell who need to understand, build, extend,
-> and debug the whole system — including its three bundled C/C++ dependencies, VTK, and the
-> code-generated Python API — without re-reading the entire tree each time.
+> and debug the whole system — including its three bundled C/C++ dependencies, the in-tree
+> geometry analysis that replaced VTK, and the code-generated Python API — without re-reading
+> the entire tree each time.
 >
 > **Project root (`$ROOT`):** the MCell build root — the parent of this `mcell_codebase_wiki/`
 > folder. All source citations below are relative to it (e.g. `mcell/src4/world.h:120`); see
 > `CLAUDE.md` §"`$ROOT`" for how to resolve it on your machine.
 > This root holds the MCell source (`mcell/`) **and** its sibling dependency repos
-> (`libbng/`, `nfsim/`, `nfsimCInterface/`, `VTK/`), plus the build orchestrator
+> (`libbng/`, `nfsim/`, `nfsimCInterface/`), plus the build orchestrator
 > (`mcell_tools/`) and the runtime Python environment (`mcell_python/`).
 
 ---
@@ -21,9 +22,10 @@
 | 01 | [`01_libbng.md`](01_libbng.md) | **libbng** — BioNetGen-Language library (`BNG::`): species/complex graphs, rule application, BNGL parser, nauty canonicalization |
 | 02 | [`02_nfsim.md`](02_nfsim.md) | **NFsim** — the network-free stochastic simulator (vendored C++ engine) |
 | 03 | [`03_nfsimCInterface.md`](03_nfsimCInterface.md) | **nfsimCInterface** — the `extern "C"` bridge MCell3 uses to drive NFsim |
-| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, and how libbng / NFsim / **VTK** are consumed (the VTK section is self-contained) |
+| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, how libbng / NFsim are consumed, and the in-tree **geometry analysis** that replaced VTK (§6, self-contained) |
 | 05 | [`05_mcell_python_api_and_build.md`](05_mcell_python_api_and_build.md) | **Python API generation & build** — the YAML→C++/nanobind codegen, `mcell_tools` build orchestration, static-Python 3.13 + uv |
 | 06 | [`06_nanobind_migration_feasibility.md`](06_nanobind_migration_feasibility.md) | **pybind11→nanobind migration** — feasibility study + the **executed** port (done & validated on Linux/macOS/Windows, `libs/pybind11` removed); MI is a non-issue; gains are build/dev ergonomics, not runtime |
+| 07 | [`07_vtk_removal.md`](07_vtk_removal.md) | **The VTK removal** (2026) — why VTK went, the decisions, what changed for users, how it was checked, the numbers; the record behind doc 04 §6 |
 | — | [`MAINTENANCE.md`](MAINTENANCE.md) | **How to keep this wiki current** — change→document map, regeneration triggers, drift-detection checklist. Read this before editing the wiki or after changing the code. |
 
 **Suggested entry paths:**
@@ -31,7 +33,7 @@
 - *"I need to add/modify a Python API class"* → 05 (YAML codegen) then 04 (engine objects it wraps).
 - *"I need to touch chemistry / species / reactions"* → 01 (libbng) then 04 §"How MCell4 uses libbng".
 - *"I need to fix network-free (NFsim) behavior"* → 03 (C boundary) then 02 (engine) — note this is an **MCell3-only** path.
-- *"I need to change geometry handling, meshes, or OBJ export"* → 04 §VTK.
+- *"I need to change geometry handling, meshes, or OBJ export"* → 04 §6 (history and reasons: 07).
 - *"I need to build/package/release"* → 05 Part B.
 
 ---
@@ -69,20 +71,21 @@ Both front-ends converge on the **same MCell4 C++ engine** (`src4/`, static lib 
                                  │ owns / delegates
                 ┌────────────────┼─────────────────┐
                 ▼                ▼                  ▼
-            libbng (BNG::)     VTK            (NFsim — MCell3 path only,
-         species/rxns/BNGL  geometry/mesh      via nfsimCInterface C API)
+            libbng (BNG::)  MCell::geometry   (NFsim — MCell3 path only,
+         species/rxns/BNGL  mesh analysis,     via nfsimCInterface C API)
+                            in-tree (doc 04 §6)
 ```
 
 ---
 
 ## 3. Build graph (from `mcell/CMakeLists.txt`)
 
-`mcell/CMakeLists.txt` is the hub. It pulls in the siblings with `add_subdirectory` and a
-pre-built VTK with `find_package`. (Details: doc 05 Part B; per-target line numbers in each dep doc.)
+`mcell/CMakeLists.txt` is the hub. It pulls in the siblings with `add_subdirectory`; nothing
+is pre-built outside it (VTK was removed, doc 07). (Details: doc 05 Part B; per-target line
+numbers in each dep doc.)
 
 ```
 mcell/CMakeLists.txt
-├── find_package(VTK …)                  # pre-built, from mcell_tools/work/build_vtk  (consumed, not built here)
 ├── add_subdirectory(libs/jsoncpp)       # vendored
 ├── find_package(nanobind CONFIG)        # vendored in libs/nanobind (libs/pybind11 removed)
 ├── add_subdirectory(../libbng)          # → BNG::bng , Nauty::nauty           [doc 01]
@@ -90,14 +93,15 @@ mcell/CMakeLists.txt
 ├── add_subdirectory(../nfsimCInterface) # → NFsimC::NFsimC                     [doc 03]
 ├── add_subdirectory(libmcell)           # → MCell::libmcell (the Python API)  [doc 05]
 └── add_subdirectory(src4)               # → MCell::mcell4 (the engine)        [doc 04]
+                                         #   + MCell::geometry (geometry analysis, static; linked by mcell4) [doc 04 §6]
 
 Targets produced here:
   ├── add_executable(mcell …)            # MCell3 C sources + MDL flex/bison + links everything below
   │      links: MCell::mcell4  MCell::libmcell_dummy  BNG::bng  NFsimC::NFsimC
-  │             NFsim::NFsim  JsonCpp::JsonCpp  Nauty::nauty  ${VTK_LIBRARIES}  Python3::Python
+  │             NFsim::NFsim  JsonCpp::JsonCpp  Nauty::nauty  Python3::Python (not on macOS)
   └── nanobind_add_module(mcell4_so …)   # entry libmcell/api/exports.cpp → output lib/mcell.so
          links: MCell::libmcell  nanobind-static  MCell::mcell4  BNG::bng  JsonCpp::JsonCpp
-                Nauty::nauty  ${VTK_LIBRARIES}    (no NFsim; on macOS the module leaves Python symbols to dynamic_lookup)
+                Nauty::nauty    (no NFsim; on macOS the module leaves Python symbols to dynamic_lookup)
 ```
 
 **Project-wide knobs worth knowing** (all in `mcell/CMakeLists.txt`):
@@ -119,17 +123,18 @@ Targets produced here:
 | **libbng** | C++17 / `BNG::` | mcell's CMake (`add_subdirectory`) | `BNG::bng`, `Nauty::nauty` | **Direct C++ API** from MCell4 (`src4`) and libmcell |
 | **NFsim** | C++ / `NFcore::`,`NFapi` | mcell's CMake | `NFsim::NFsim` (+ static/pic/EXE) | **Indirect** — only through nfsimCInterface |
 | **nfsimCInterface** | C ABI (`extern "C"`) | mcell's CMake | `NFsimC::NFsimC` | **Direct C calls** from MCell3 (`src/*nfsim*.c`) |
-| **VTK** | C++ / `vtk*` | **built separately** by `mcell_tools` (`work/build_vtk`), consumed via `find_package` | 8 modules (see below) | **Direct C++ API** from `src4/vtk_utils.cpp` + libmcell geometry utils |
+| **Geometry analysis** (in-tree; replaced VTK) | C++23 / `MCell::GeometryAnalysis`, `MCell::Predicates` | mcell's CMake (`src4`) | `MCell::geometry` (static; via `MCell::mcell4`) | **Direct C++ API** from `src4` (`counted_volume_utils`, `mesh_utils`, `Region`), libmcell and `data_model_to_pymcell` |
 
-### VTK — only 8 modules are used
-MCell requests exactly these (and gets the rest transitively):
-`CommonCore`, `CommonDataModel`, `CommonTransforms`, `FiltersCore`, `FiltersModeling`,
-`FiltersSources`, `IOExport`, `RenderingCore`. They are used **only** for geometry analysis and
-export — building the counted-volume containment hierarchy (`vtkSelectEnclosedPoints`,
-`vtkCollisionDetectionFilter`), mesh validation/measurement (`vtkFeatureEdges`,
-`vtkMassProperties`, `vtkCleanPolyData`, `vtkTriangleFilter`), and Wavefront-OBJ export
-(`vtkOBJExporter` + a minimal RenderingCore scene). There is **no interactive rendering**. Full
-class-by-class map is in **doc 04 §VTK** (self-contained).
+### Geometry analysis — in-tree since the VTK removal
+Until 2026 MCell used eight VTK modules for geometry analysis and OBJ export. The in-tree code that
+replaced them has no external dependency:
+- `MCell::geometry`, a static library: Shewchuk's exact predicates and `GeometryAnalysis`;
+- `MeshUtils` and `CountedVolumeUtils`.
+
+It does the counted-volume containment hierarchy, compartment nesting, the closedness checks,
+volumes and areas (releases by concentration, BNGL export, `data_model_to_pymcell`), the
+parsable mesh-check warnings, and the Wavefront-OBJ export. There is no rendering. Reference:
+**doc 04 §6** (self-contained). History and reasons: **doc 07**.
 
 ---
 
@@ -187,9 +192,8 @@ API class declaratively (attributes, types, defaults, methods, enums, constants,
 **manual** step `cd mcell/libmcell/definition && python3 gen.py` regenerates
 `libmcell/generated/gen_*.{h,cpp}`, `gen_constants.*`, `gen_vectors_bind.cpp`, the `mcell.pyi`
 stub, and RST docs. It is **not** wired into CMake — regeneration is a deliberate developer action.
-The build itself is driven by `mcell_tools/run.py` → `scripts/build.py`: it builds **VTK first**
-(static, into `work/build_vtk`), then configures+builds MCell into `work/build_mcell`, then
-bundles. The runtime Python is a **statically-built Python 3.13** pinned by `mcell_python/.python-version`;
+The build itself is driven by `mcell_tools/run.py` → `scripts/build.py`: it configures+builds
+MCell into `work/build_mcell` (there is no VTK step since the VTK removal), then bundles. The runtime Python is a **statically-built Python 3.13** pinned by `mcell_python/.python-version`;
 `mcell_python/` is a **uv** project/venv (numpy/scipy/pandas/pyyaml/pyside6/…) that provides the
 environment for `import mcell` and for running model scripts. Full details, the YAML schema, an
 annotated class example, and the regeneration/build commands are in **doc 05**.
@@ -209,8 +213,10 @@ annotated class example, and the regeneration/build commands are in **doc 05**.
   they are not standalone units; changing them recompiles their includers. (doc 04)
 - **Exact Python version coupling:** `find_package(Python3 3.13 EXACT)` — the module is ABI-bound
   to the specific statically-built 3.13. (doc 05)
-- **VTK is built and consumed out-of-tree** (`mcell_tools/work/build_vtk`); the path is hardcoded
-  in `mcell/CMakeLists.txt`. A clean checkout must build VTK before MCell. (doc 05)
+- **The geometry files are C++23 and built without floating-point contraction.** The per-file
+  flags are in `src4/CMakeLists.txt:42-89`: keep them when moving files or adding geometry code.
+  Fused multiply-add breaks the exact predicates and changes the last bits of volumes. Mesh edges
+  are matched by exact coordinates, not by vertex index. (doc 04 §6)
 
 ---
 

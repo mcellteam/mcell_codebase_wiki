@@ -58,7 +58,8 @@ from pathlib import Path
 # in the wiki dir, so renaming a doc's title does not break this.
 RULES = [
     # mcell repo internals
-    ("mcell", r"^src4/vtk_utils",                 ["04", "00"], "VTK usage"),
+    ("mcell", r"^src4/(predicates|geometry_analysis|mesh_utils|counted_volume_utils)\.",
+                                                  ["04", "00"], "geometry analysis"),
     ("mcell", r"^src4/",                          ["04", "00"], "MCell4 engine"),
     ("mcell", r"^src/.*nfsim",                    ["03", "04", "00"], "MCell3 NFsim glue"),
     ("mcell", r"^src/",                           ["04", "00"], "MCell3 legacy path"),
