@@ -312,7 +312,7 @@ and similarly to split on `!` (bonds), `@` (compartment), `_` (identifiers)
 (`NFinput.cpp:913,951,953,2847`). This is the **only** place NFsim pulls in
 Boost. The Boost headers come from the bundled copy in `libbng/libs` — MCell's
 build wires them in explicitly because there is no system Boost on macOS
-(`mcell/CMakeLists.txt:585-595`).
+(`mcell/CMakeLists.txt:589-601`).
 
 The C++ API layer keeps the parsed XML in `NFinput::XMLStructures` /
 `NFinput::XMLFlags` statics so the System can be re-initialized cheaply
@@ -351,7 +351,7 @@ Per-target config (`:72-82`):
   (`:65-66`).
 
 **Boost** is *not* found by NFsim itself; it is injected by the parent MCell
-build (`mcell/CMakeLists.txt:592-595`) as a SYSTEM PRIVATE include of
+build (`mcell/CMakeLists.txt:595-601`) as a SYSTEM PRIVATE include of
 `libbng/libs`. Note the build guard: **gcc-8.3.0 segfaults NFsim**, so MCell's
 top-level CMake hard-errors on that exact compiler version
 (`mcell/CMakeLists.txt:21-28`).
@@ -414,11 +414,11 @@ the reactant queries), `ReactionClass` (name/rate/firing), `Observable`
 ### MCell side — `mcell/CMakeLists.txt`
 
 - Both bundled siblings are added as subdirectories
-  (`add_subdirectory(.../nfsim …)` `:364`; `nfsimCInterface` `:365`).
+  (`add_subdirectory(.../nfsim …)` `:354`; `nfsimCInterface` `:355`).
 - The MCell executable links `NFsimC::NFsimC NFsim::NFsim`
-  (`mcell/CMakeLists.txt:544`), and adds `nfsimCInterface/src` to its include path
-  (`:471`) — MCell's NFsim glue is its own C files `src/nfsim_func.c`,
-  `src/react_*_nfsim.c`, `src/react_util_nfsim.c` (`:410-419`).
+  (`mcell/CMakeLists.txt:534`), and adds `nfsimCInterface/src` to its include path
+  (`:461`) — MCell's NFsim glue is its own C files `src/nfsim_func.c`,
+  `src/react_*_nfsim.c`, `src/react_util_nfsim.c` (`:400-409`).
 - MCell's call sites use only the `_c` API: `setupNFSim_c` in `argparse.c`,
   `logNFSimObservables_c`/`deleteNFSimSystem_c` in `mcell_run.c`,
   `constructNauty_c` in `vol_util.c`/`react_outc_nfsim.c`,
@@ -444,4 +444,4 @@ links `NFsim::NFsim_pic`). MCell crosses the boundary purely through the
 | C++ API facade | `nfsim/include/NFapi.hh`, `nfsim/src/NFapi.cpp` |
 | C wrapper (MCell boundary) | `nfsimCInterface/src/nfsim_c.{h,cpp}`, `nfsim_c_structs.{h,cpp}` |
 | Build targets / aliases | `nfsim/CMakeLists.txt:52-70` |
-| MCell linkage / gcc-8.3.0 guard | `mcell/CMakeLists.txt:21-28,364-365,544,585-595` |
+| MCell linkage / gcc-8.3.0 guard | `mcell/CMakeLists.txt:21-28,354-355,534,589-601` |

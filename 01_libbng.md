@@ -240,11 +240,11 @@ MCell adds the library and links it in **`mcell/CMakeLists.txt`**:
 
 | Line | Statement |
 |---|---|
-| `mcell/CMakeLists.txt:362` | `add_subdirectory(${CMAKE_SOURCE_DIR}/../libbng/ ${CMAKE_CURRENT_BINARY_DIR}/libs/libbng)` |
-| `mcell/CMakeLists.txt:472-474` | `include_directories(... ../libbng ../libbng/libs ../libbng/libs/sparsehash/src)` |
-| `mcell/CMakeLists.txt:544` | `mcell` links `... BNG::bng NFsimC::NFsimC NFsim::NFsim JsonCpp::JsonCpp Nauty::nauty ...` |
-| `mcell/CMakeLists.txt:552` | `add_dependencies(mcell4_so libmcell mcell4 libbng ...)` |
-| `mcell/CMakeLists.txt:555` | `mcell4_so` (the `.so`) links `... BNG::bng JsonCpp::JsonCpp Nauty::nauty ...` |
+| `mcell/CMakeLists.txt:352` | `add_subdirectory(${CMAKE_SOURCE_DIR}/../libbng/ ${CMAKE_CURRENT_BINARY_DIR}/libs/libbng)` |
+| `mcell/CMakeLists.txt:462-464` | `include_directories(... ../libbng ../libbng/libs ../libbng/libs/sparsehash/src)` |
+| `mcell/CMakeLists.txt:534` | `mcell` links `... BNG::bng NFsimC::NFsimC NFsim::NFsim JsonCpp::JsonCpp Nauty::nauty ...` |
+| `mcell/CMakeLists.txt:553` | `add_dependencies(mcell4_so libmcell mcell4 libbng ...)` |
+| `mcell/CMakeLists.txt:556` | `mcell4_so` (the `.so`) links `... BNG::bng JsonCpp::JsonCpp Nauty::nauty ...` |
 
 `libmcell` itself does **not** directly link `BNG::bng`; BNG symbols are resolved
 transitively at the executable / `.so` link step (note also lines 57/100 comments
@@ -264,9 +264,9 @@ about not turning bundled static libs like nauty/libbng into shared objects).
   with partitioning, RNG, cleanup-periodicity and memory-limit settings. This is
   the sole inheritance from a BNG class.
 
-- **Engine ownership & accessors:** `src4/world.h:242` holds
+- **Engine ownership & accessors:** `src4/world.h:243` holds
   `BNG::BNGEngine bng_engine;`. `World::get_all_species()` and
-  `World::get_all_rxns()` (`world.h:167-171`) forward to the engine. Partitions
+  `World::get_all_rxns()` (`world.h:168-172`) forward to the engine. Partitions
   and events query through these.
 
 - **Most-used BNG symbols** (approx. counts across MCell):

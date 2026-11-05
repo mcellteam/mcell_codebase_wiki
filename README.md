@@ -49,7 +49,7 @@ Plus:
 
 The wiki carries **no machine-specific absolute paths**. Every citation is written relative to a
 single anchor, **`$ROOT`** — the MCell build root, the directory that holds the MCell source, its
-sibling repos, and this `mcell_codebase_wiki/` folder. So a citation like `mcell/src4/world.h:120`
+sibling repos, and this `mcell_codebase_wiki/` folder. So a citation like `mcell/src4/world.h:121`
 means `$ROOT/mcell/src4/world.h`.
 
 `$ROOT` is **self-locating**: it is always the parent of this wiki folder. To make the citations

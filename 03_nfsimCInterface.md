@@ -213,10 +213,10 @@ Include dirs (`CMakeLists.txt:18-30`, applied to both targets):
 
 MCell wires it up in `mcell/CMakeLists.txt`:
 
-- `add_subdirectory(.../nfsimCInterface ...)` — `mcell/CMakeLists.txt:365`
-- include dir `.../nfsimCInterface/src` — `mcell/CMakeLists.txt:471`
+- `add_subdirectory(.../nfsimCInterface ...)` — `mcell/CMakeLists.txt:355`
+- include dir `.../nfsimCInterface/src` — `mcell/CMakeLists.txt:461`
 - links `NFsimC::NFsimC NFsim::NFsim` into the `mcell` target —
-  `mcell/CMakeLists.txt:544`
+  `mcell/CMakeLists.txt:534`
 
 ---
 
@@ -339,5 +339,5 @@ ever named in MCell code — everything is `void*` plus the accessor functions.
   `react_util_nfsim.c`, `nfsim_func.c`, `vol_util.c`, `mcell_run.c`,
   `react_outc.c`, `argparse.c`; declarations in `mcell/src/react_nfsim.h`.
 - MCell's local opaque-map helper header used alongside: `mcell/src/map_c.h`.
-- Build wiring: `mcell/CMakeLists.txt:365` (add_subdirectory), `:471` (include),
-  `:544` (link `NFsimC::NFsimC NFsim::NFsim`).
+- Build wiring: `mcell/CMakeLists.txt:355` (add_subdirectory), `:461` (include),
+  `:534` (link `NFsimC::NFsimC NFsim::NFsim`).

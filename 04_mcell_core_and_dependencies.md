@@ -26,7 +26,7 @@ linked together:
 | Directory | `mcell/src/` | `mcell/src4/` |
 | Language | C, compiled as C++ (`-std=gnu++17`) | Modern C++17 (the geometry `.cpp` files of §6 are C++23) |
 | Driven by | MDL text files (flex/bison parser) | Python API / BNGL (via libbng) |
-| Master state | `struct volume` (god-struct, `src/mcell_structs.h:1052`) | `class World` (`src4/world.h:57`) |
+| Master state | `struct volume` (god-struct, `src/mcell_structs.h:1052`) | `class World` (`src4/world.h:58`) |
 | Species/rxn storage | hand-rolled hash tables in `volume` | delegated to `BNG::BNGEngine` |
 | Network-free rxns | NFsim (`src/*_nfsim.c`) | **not used** |
 | Build artifact | the `mcell` executable | the `mcell.so` Python module (`mcell4_so`) and also the executable's run engine |
@@ -82,16 +82,16 @@ stay consistent during translation.
 
 ### 1.3 Which engine each artifact uses
 
-- The **`mcell` executable** (`add_executable(mcell ...)`, `CMakeLists.txt:519-525`) is
+- The **`mcell` executable** (`add_executable(mcell ...)`, `mcell/CMakeLists.txt:509-515`) is
   built from the MCell3 C sources + the MDL bison/flex outputs, and links the
   shared `MCell::mcell4` static engine library. Default MDL runs flow
   MCell3-parse → convert → MCell4-run.
 - The **`mcell4_so` Python module** (`nanobind_add_module(mcell4_so ...)`,
-  `CMakeLists.txt:512`, entry `libmcell/api/exports.cpp`, import name `mcell`) is
+  `mcell/CMakeLists.txt:488`, entry `libmcell/api/exports.cpp`, import name `mcell`) is
   the pure MCell4 path: the Python API builds an MCell4 `World` directly via
   `libmcell`, with **no** MCell3/MDL involved.
 - Both link the common static engine library **`mcell4`**
-  (`add_library(${PROJECT_NAME} STATIC ...)`, `src4/CMakeLists.txt:41-44`, aliased
+  (`add_library(${PROJECT_NAME} STATIC ...)`, `src4/CMakeLists.txt:97-100`, aliased
   `MCell::mcell4`).
 
 ---
@@ -179,27 +179,27 @@ src/
 
 ### 3.1 `World` — the central object
 
-`class World` (`world.h:57`) owns the entire simulation state. Key members:
+`class World` (`world.h:58`) owns the entire simulation state. Key members:
 
 | Member | Type | Purpose |
 |---|---|---|
-| `config` | `SimulationConfig` | all configuration constants (`world.h:240`) |
-| `bng_engine` | `BNG::BNGEngine` | **owns all species + reactions** (delegated to libbng, `world.h:242`) |
-| `stats` | `SimulationStats` | iteration counter + counters (`world.h:244`) |
-| `scheduler` | `Scheduler` | time-ordered event calendar (`world.h:249`) |
-| `partitions` | `PartitionVector` | spatial partitions (`world.h:258`) |
-| `count_buffers` | `CountBufferVector` | buffered observable output (`world.h:260`) |
-| `rng` | `rng_state` | single RNG state for the whole simulation (`world.h:255`) |
-| `callbacks` | `API::Callbacks&` | Python callback hooks (`world.h:247`) |
+| `config` | `SimulationConfig` | all configuration constants (`world.h:241`) |
+| `bng_engine` | `BNG::BNGEngine` | **owns all species + reactions** (delegated to libbng, `world.h:243`) |
+| `stats` | `SimulationStats` | iteration counter + counters (`world.h:245`) |
+| `scheduler` | `Scheduler` | time-ordered event calendar (`world.h:250`) |
+| `partitions` | `PartitionVector` | spatial partitions (`world.h:263`) |
+| `count_buffers` | `CountBufferVector` | buffered observable output (`world.h:265`) |
+| `rng` | `rng_state` | single RNG state for the whole simulation (`world.h:256`) |
+| `callbacks` | `API::Callbacks&` | Python callback hooks (`world.h:248`) |
 
 Two run entry points:
 
-- **MDL mode:** `init_and_run_simulation()` (`world.cpp:621`) → `init_simulation()` then
-  `run_n_iterations(total_iterations, true)` (`world.cpp:625-631`). Called by the
+- **MDL mode:** `init_and_run_simulation()` (`world.cpp:624`) → `init_simulation()` then
+  `run_n_iterations(total_iterations, true)` (`world.cpp:628-634`). Called by the
   executable via `mcell4_run_simulation`.
 - **Python mode:** `init_simulation(start_time)` (`world.cpp:242`) is called once, then
-  `run_n_iterations(num_iterations, ...)` (`world.cpp:377`) may be called repeatedly,
-  finally `end_simulation()` (`world.cpp` ~`:580`).
+  `run_n_iterations(num_iterations, ...)` (`world.cpp:380`) may be called repeatedly,
+  finally `end_simulation()` (`world.cpp` ~`:583`).
 
 ### 3.2 `Partition` — spatial subdivision
 
@@ -218,7 +218,7 @@ Subparts are the spatial-hashing unit used to find reaction partners cheaply:
 
 The partition also owns the molecule array, the geometry objects (`GeometryObject`,
 `Wall`, `Region`), and the surface grids. `World::get_partition_index(pos)`
-(`world.h:101`) finds which partition contains a point; `add_partition()` (`world.h:113`)
+(`world.h:102`) finds which partition contains a point; `add_partition()` (`world.h:114`)
 appends a new lattice partition.
 
 ### 3.3 The Scheduler and the event system
@@ -301,18 +301,18 @@ The concrete event classes:
 
 ### 3.5 The simulation main loop
 
-`World::run_n_iterations()` (`world.cpp:377`) is the loop:
+`World::run_n_iterations()` (`world.cpp:380`) is the loop:
 
 ```
 do {
-  check_checkpointing_signal();                       // world.cpp:404
-  double time = scheduler.get_next_event_time();      // world.cpp:418
-  current_iteration = time_to_iteration(time);        // world.cpp:421
+  check_checkpointing_signal();                       // world.cpp:407
+  double time = scheduler.get_next_event_time();      // world.cpp:421
+  current_iteration = time_to_iteration(time);        // world.cpp:424
   if (current_iteration >= first + num_iterations) break;
   ... periodic count-buffer flush / progress report ...
-  EventExecutionInfo info = scheduler.handle_next_event();  // world.cpp:454  <-- runs one event
+  EventExecutionInfo info = scheduler.handle_next_event();  // world.cpp:457  <-- runs one event
   ... report progress ...
-  if (terminate && info.type_index == SIMULATION_END_CHECK) break;  // world.cpp:488
+  if (terminate && info.type_index == SIMULATION_END_CHECK) break;  // world.cpp:491
 } while (true);
 ```
 
@@ -369,26 +369,26 @@ integration boundary is clean: `World` owns one `BNG::BNGEngine`, and
 
 | MCell-side construct | libbng type | Where |
 |---|---|---|
-| `World::bng_engine` | `BNG::BNGEngine` | `world.h:242` |
+| `World::bng_engine` | `BNG::BNGEngine` | `world.h:243` |
 | `SimulationConfig` | `: public BNG::BNGConfig` | `simulation_config.h:28` |
-| `World::get_all_species()` | `BNG::SpeciesContainer&` | `world.h:167` → `bng_engine.get_all_species()` |
-| `World::get_all_rxns()` | `BNG::RxnContainer&` | `world.h:170` → `bng_engine.get_all_rxns()` |
+| `World::get_all_species()` | `BNG::SpeciesContainer&` | `world.h:168` → `bng_engine.get_all_species()` |
+| `World::get_all_rxns()` | `BNG::RxnContainer&` | `world.h:171` → `bng_engine.get_all_rxns()` |
 | BNGL/compartment data | `bng_engine.get_data()` → `BNG::BNGData` | `partition.cpp:889` |
 
 The call surface MCell4 actually uses:
 
 - **`SpeciesContainer`** — `get_all_species().get(species_id)` returns a `BNG::Species`
-  (`world.cpp:703`); `.get_count()` (`world.cpp:263`) and `.dump()` (`world.cpp:654`).
+  (`world.cpp:706`); `.get_count()` (`world.cpp:263`) and `.dump()` (`world.cpp:657`).
   Used everywhere the engine needs a species' diffusion constant, mass, flags, etc.
 - **`RxnContainer`** — `get_all_rxns().get(rxn_rule_id)` returns a `BNG::RxnRule`
-  (`world.cpp:685`); `.dump()` (`world.cpp:655`). The reaction-utility `.inl`
+  (`world.cpp:688`); `.dump()` (`world.cpp:658`). The reaction-utility `.inl`
   (`rxn_utils.inl`) consults BNG rxn classes during diffusion to decide outcomes.
 - **`BNGData`** — `bng_engine.get_data().get_compartment(id)` returns a
   `BNG::Compartment` (`partition.cpp:889,895`), used for compartment hierarchy /
-  region containment. `.dump()` (`world.cpp:653`).
+  region containment. `.dump()` (`world.cpp:656`).
 - **`BNGConfig`** — `SimulationConfig::init()` calls `BNGConfig::init()`
   (`simulation_config.h:110`); final warnings via
-  `bng_engine.get_config().print_final_warnings()` (`world.cpp:607`).
+  `bng_engine.get_config().print_final_warnings()` (`world.cpp:610`).
 - **BNGL parsing** (`parse_bngl_file`) and BNGL export (`bngl_exporter.cpp`,
   `bng_data_to_datamodel_converter.cpp`) are driven from MCell through the BNG engine
   on the Python/BNGL path.
@@ -412,7 +412,7 @@ This is what makes rule-based models with combinatorially huge state spaces trac
 
 Confirmed by search: the only `nfsim` occurrences in `src4/` are (a) commented-out
 field references in the converter (`mcell3_world_converter.cpp:1092-1094`), (b) the
-nfsimCInterface include path in `src4/CMakeLists.txt:55` (carried for the shared link),
+nfsimCInterface include path in `src4/CMakeLists.txt:112` (carried for the shared link),
 and (c) a `nfsim_export` *naming* flag in the BNGL exporter (`bngl_exporter.cpp:43`) that
 only affects how rates are *labeled* when exporting BNGL for an external NF run. The
 MCell4 engine itself performs no NFsim queries. Network-free behavior in MCell4 is

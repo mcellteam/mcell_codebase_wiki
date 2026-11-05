@@ -327,15 +327,15 @@ Supporting hand-written infrastructure:
 ## 4. nanobind module assembly (`mcell4_so`)
 
 The module is assembled by **`nanobind_add_module(mcell4_so …)`**
-(`mcell/CMakeLists.txt:512`; nanobind is found via `find_package(nanobind CONFIG)`
-at `:374` against the vendored `libs/nanobind`). Crucially, the *only* libmcell-API
+(`mcell/CMakeLists.txt:488`; nanobind is found via `find_package(nanobind CONFIG)`
+at `:350` against the vendored `libs/nanobind`). Crucially, the *only* libmcell-API
 file listed in that target is `libmcell/api/exports.cpp` — all the actual bindings
 come in by **linking the `libmcell` static library** (`target_link_libraries(mcell4_so
-PUBLIC MCell::libmcell …)`, `CMakeLists.txt:578`), which compiles all the
+PUBLIC MCell::libmcell …)`, `mcell/CMakeLists.txt:554`), which compiles all the
 `gen_*.cpp` binding functions and the hand-written `api/bindings.cpp`. Because
 nanobind has a **static support library** (`nanobind-static`) where pybind11 was
 header-only, `mcell4_so` also links `nanobind-static` *after* `libmcell`
-(`CMakeLists.txt:584`) so the support symbols resolve under GNU ld's link order.
+(`mcell/CMakeLists.txt:560`) so the support symbols resolve under GNU ld's link order.
 
 `api/exports.cpp` is a deliberate workaround (`exports.cpp:1`): it just declares
 `extern "C" void PyInit_mcell();` and references it from a static initializer so
@@ -356,17 +356,17 @@ NB_MODULE(mcell, m) {
 }
 ```
 
-`mcell4_so` properties (`CMakeLists.txt:588-594`): `PREFIX ""`,
+`mcell4_so` properties (`mcell/CMakeLists.txt:564-571`): `PREFIX ""`,
 `OUTPUT_NAME "mcell"`, `SUFFIX ".so"` (`.pyd` on Windows) — this explicit override
 deliberately wins over the versioned suffix `nanobind_add_module` would otherwise
 apply, so a plain `mcell.so`/`mcell.pyd` is produced — position-independent.
 The result is `<build>/lib/mcell.so` (`CMAKE_LIBRARY_OUTPUT_DIRECTORY`,
-`CMakeLists.txt:386`).
+`mcell/CMakeLists.txt:362`).
 
 **Package layout for `import mcell`:** there is no Python *package* directory —
 `mcell.so` is a single extension module placed directly on the path, accompanied
 by the `mcell.pyi` stub. CMake `configure_file`s the checked-in stub
-`libmcell/generated/mcell.pyi` → `<build>/utils/mcell.pyi` (`CMakeLists.txt:506`).
+`libmcell/generated/mcell.pyi` → `<build>/utils/mcell.pyi` (`mcell/CMakeLists.txt:482`).
 Users `import mcell` after adding the directory containing `mcell.so` to
 `sys.path` (in the bundle, the mcell install dir; the `.pyi` rides alongside for
 IDE/type-checker support).
@@ -513,7 +513,7 @@ Build-orchestration view (dep internals are covered in the libbng/nfsim docs):
 
 **CMake side** (`mcell/CMakeLists.txt:4-12`): if `PYTHON_VERSION` is empty it
 defaults to **3.13**, derives `PYTHON_VERSION_NO_DOT` (`313`, used as the
-`-DPYTHON_VERSION=313` compile define at `:117`), sets
+`-DPYTHON_VERSION=313` compile define at `:94`), sets
 `MCELL_PYTHON_VERSION` (renamed from `PYBIND11_PYTHON_VERSION` when pybind11 was
 removed), and requires an **exact** interpreter+development match:
 
@@ -582,7 +582,7 @@ alias such as `mp` may point at another root's venv — check before relying on 
 Two families of Python tooling are copied into the build tree (not generated):
 
 - **`mcell/src/rules_py/*.py`** → `configure_file`'d into `<build>/`
-  (`CMakeLists.txt:491-503`): `grammar_definition.py`, `mdlr2mdl.py`,
+  (`mcell/CMakeLists.txt:467-478`): `grammar_definition.py`, `mdlr2mdl.py`,
   `mcell3r.py`, `nfsim_python.py`, `read_mdl.py`, `write_mdl.py`,
   `read_bngxml.py`/`split_bngxml.py`/`write_bngxmle.py`, `small_structures.py`,
   `postprocess_mcell3r.py`. These convert **MDLr** (rule-based MDL) into plain MDL
@@ -592,7 +592,7 @@ Two families of Python tooling are copied into the build tree (not generated):
   `mcell4_generator.cpp`, `python_generator.cpp`, `bngl_generator.cpp` — converts a
   CellBlender **data model** JSON into a pymcell4 Python script) and `utils/`
   itself (`mcell4_runner`, `bng_analyzer`, plotting/visualization helpers). `bng2/`
-  (BioNetGen) is copied to `<build>/bng2/` (`CMakeLists.txt:510`).
+  (BioNetGen) is copied to `<build>/bng2/` (`mcell/CMakeLists.txt:486`).
   - **The generated `model.py` guards its run block.** `MCell4Generator::generate_model`
     (`mcell/utils/data_model_to_pymcell/mcell4_generator.cpp:1245`) wraps the
     "initialization and execution" section in `if __name__ != '__mp_main__':` (`:1341`).

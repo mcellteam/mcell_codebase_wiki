@@ -10,7 +10,7 @@ points here; this file holds the substance.
 The wiki carries **no machine-specific absolute paths**. Every source citation in every doc is
 written **relative to a single anchor, `$ROOT`** — the **MCell build root**, the directory that
 holds the sibling repos (`mcell/`, `libbng/`, `nfsim/`, `nfsimCInterface/`, `mcell_tools/`,
-`mcell_python/`) **and** this `mcell_codebase_wiki/` folder. A citation like `mcell/src4/world.h:120`
+`mcell_python/`) **and** this `mcell_codebase_wiki/` folder. A citation like `mcell/src4/world.h:121`
 means `$ROOT/mcell/src4/world.h`.
 
 **`$ROOT` is self-locating — it is the parent of the folder this file lives in.** There is nothing

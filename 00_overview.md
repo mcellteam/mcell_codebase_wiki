@@ -6,7 +6,7 @@
 > the entire tree each time.
 >
 > **Project root (`$ROOT`):** the MCell build root — the parent of this `mcell_codebase_wiki/`
-> folder. All source citations below are relative to it (e.g. `mcell/src4/world.h:120`); see
+> folder. All source citations below are relative to it (e.g. `mcell/src4/world.h:121`); see
 > `CLAUDE.md` §"`$ROOT`" for how to resolve it on your machine.
 > This root holds the MCell source (`mcell/`) **and** its sibling dependency repos
 > (`libbng/`, `nfsim/`, `nfsimCInterface/`), plus the build orchestrator

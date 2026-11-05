@@ -30,7 +30,7 @@ and dissolves "risk-1" (the bind_vector copy-on-`__getitem__` nested-mutation is
 - `Vec3` is `glm::dvec3` (`mcell/src4/defines.h:358`) — a standard-layout struct of 3 contiguous
   scalars. A `std::vector<Vec3>` **is** a contiguous `(N,3)` buffer.
 - The engine is `Vec3`-based throughout; `geometry_utils.cpp` builds `std::vector<Vec3>& vertex_list`
-  (the `create_box`/`create_icosphere` helpers, `mcell/libmcell/api/geometry_utils.cpp:128-145`),
+  (the `create_box`/`create_icosphere` helpers, `mcell/libmcell/api/geometry_utils.cpp:124-141`),
   then the result is presented to Python as `vector<vector<double>>`. So the nested form is **extra
   conversion work** at the boundary, and it is the odd one out everywhere else (numpy, glm, VTK,
   OBJ/PLY mesh files).
@@ -107,8 +107,8 @@ Three coherent options, in increasing ambition:
 ## 5. Consequences & ecosystem impact
 
 ### 5.1 In-tree (mcell)
-- **`mcell4_converter.cpp`** — the main engine consumer (`:183`, `:747`, `:758`, `:919`, `:929`,
-  `:1040`). Iterates `for (auto& vert : o->vertex_list)` and `o->wall_list[side][i]`. With
+- **`mcell4_converter.cpp`** — the main engine consumer (`:185`, `:749`, `:760`, `:921`, `:931`,
+  `:1049`). Iterates `for (auto& vert : o->vertex_list)` and `o->wall_list[side][i]`. With
   `vector<Vec3>`/`vector<ivec3>` the loops are *simpler* (glm `operator[]` still serves `wall_list[side][i]`).
   **Net: likely a simplification, fully internal.**
 - **`api/geometry_object.cpp`, `api/compartment_utils.cpp`** — read `vertex_list` element-wise;
@@ -122,7 +122,7 @@ Three coherent options, in increasing ambition:
 - **`.pyi` stub + RST docs** — regenerated; type annotations change (`List[Vec3]` / `numpy.ndarray`).
 
 ### 5.2 The CellBlender data-model → pymcell4 path (mcell utility)
-- **`utils/data_model_to_pymcell/`** (`python_generator.cpp:744`, `data_model_geometry.cpp:62-73`):
+- **`utils/data_model_to_pymcell/`** (`python_generator.cpp:744`, `data_model_geometry.cpp:31-47`):
   reads `KEY_VERTEX_LIST` / `KEY_ELEMENT_CONNECTIONS` from the **JSON data model** and *generates
   pymcell4 Python source*. It emits the literal Python for `vertex_list`. **It must be updated to
   emit the new API form** (under C3, the existing `[[x,y,z],…]` literal still works → minimal/no change).
