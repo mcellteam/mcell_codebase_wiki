@@ -323,7 +323,7 @@ flags and keep MCell's legacy-code flags (`-fpermissive` / `/Zc:strictStrings-`)
   `…-x86_64-linux-gnu.so`, `….pyd` on Windows). ⚠️ See §10.3 — MCell currently *forces* a plain
   `mcell.so` / `mcell.pyd`.
 - **Size optimization + symbol stripping** in release builds (`-Os`, strip on Linux/macOS),
-  replacing MCell's manual `-flto` plumbing (`mcell/CMakeLists.txt:188-195`) and the
+  replacing MCell's manual `-flto` plumbing (`mcell/CMakeLists.txt:197-204`) and the
   `PYBIND11_LTO_CXX_FLAGS=""` centos7 workaround (`:353`). LTO becomes an opt-in `LTO` flag.
 - **Compiler floor:** C++17, GCC 8+/Clang 8+/MSVC 2019+ on all three OSes — already satisfied.
   MCell's `cmake_minimum_required(VERSION 3.25…)` (`CMakeLists.txt:1`) comfortably exceeds
@@ -341,7 +341,7 @@ flags and keep MCell's legacy-code flags (`-fpermissive` / `/Zc:strictStrings-`)
 ### 10.3 Extension filename — a concrete tooling touch-point
 MCell deliberately forces a plain module name today:
 ```cmake
-# mcell/CMakeLists.txt:567-570
+# mcell/CMakeLists.txt:576-579
 if (WIN32) set_target_properties(mcell4_so PROPERTIES SUFFIX ".pyd")
 else()     set_target_properties(mcell4_so PROPERTIES SUFFIX ".so")  # plain .so even on macOS
 ```
@@ -362,7 +362,7 @@ names. Whichever path is chosen, reconcile it with `pypi_wheel.py` and `build.py
   trips MSVC's object-section limit. Expect to add `/bigobj` for the `mcell4_so` target on MSVC
   (nanobind's own examples commonly do). Add it as a Windows-guarded option.
 - Keep the existing MSVC "searches for python library when linking utils" workaround
-  (`mcell/CMakeLists.txt:504-506`) in mind when reworking the link section.
+  (`mcell/CMakeLists.txt:513-515`) in mind when reworking the link section.
 
 ### 10.5 Stable ABI & free-threading (cross-platform, optional)
 - **`STABLE_ABI`** (nanobind option) requires **Python 3.12+** — MCell's 3.13 qualifies. A
@@ -563,7 +563,7 @@ tree (commit `06837640` on `mcell4_nanobind`). What was done:
    Python lib on macOS — Python C-API symbols are left undefined and resolved at runtime. Replaced
    with the equivalent spelled out directly, dropping the pybind11 target:
    ```cmake
-   # mcell/CMakeLists.txt:548
+   # mcell/CMakeLists.txt:557
    target_link_options(mcell PRIVATE $<$<PLATFORM_ID:Darwin>:LINKER:-undefined,dynamic_lookup>)
    ```
    The **module** (`mcell4_so`) needed nothing — `nanobind_add_module` already applies this on
@@ -574,11 +574,11 @@ tree (commit `06837640` on `mcell4_nanobind`). What was done:
    deleted; `PYBIND11_PYTHON_VERSION` → **`MCELL_PYTHON_VERSION`** (`mcell/CMakeLists.txt:8,10` +
    `libmcell/CMakeLists.txt:7`); the `api_config.h` MSVC-include-collision comment generalized so it
    no longer implies a live pybind11 dependency. The `.so` suffix override
-   (`mcell/CMakeLists.txt:570`) is **kept** — i.e. §10.3 option (a), plain `mcell.so` on macOS.
+   (`mcell/CMakeLists.txt:579`) is **kept** — i.e. §10.3 option (a), plain `mcell.so` on macOS.
 3. **Python resolution on macOS is correct.** A clean configure resolves both
    `find_package(Python3 … EXACT)` and nanobind's `find_package(Python … EXACT)` to the *same*
    venv interpreter (`mcell_python/.venv/bin/python3.13`, 3.13.12) — the latter pinned via
-   `set(Python_EXECUTABLE ${Python3_EXECUTABLE})` just before it (`mcell/CMakeLists.txt:347`).
+   `set(Python_EXECUTABLE ${Python3_EXECUTABLE})` just before it (`mcell/CMakeLists.txt:356`).
 
 **Verification (macOS):**
 - Clean configure+build **from scratch with `libs/pybind11` deleted** — zero `pybind11` mentions in
@@ -606,11 +606,11 @@ already complete; this step only made both artifacts build and pass on Windows.
 
 **What was already correct (verified, not assumed):**
 - **`.pyd` suffix (§10.3 option a).** The explicit `set_target_properties(mcell4_so PROPERTIES
-  SUFFIX ".pyd")` override (`mcell/CMakeLists.txt:568`) wins over `nanobind_add_module`'s versioned
+  SUFFIX ".pyd")` override (`mcell/CMakeLists.txt:577`) wins over `nanobind_add_module`'s versioned
   suffix — a plain `mcell.pyd` is produced and `import mcell` loads it.
 - **Python resolution (§10).** A clean configure resolves **both** `find_package(Python3 … EXACT)`
   and nanobind's `find_package(Python … EXACT)` (pinned via `set(Python_EXECUTABLE
-  ${Python3_EXECUTABLE})`, `mcell/CMakeLists.txt:347`) to the **same** system interpreter
+  ${Python3_EXECUTABLE})`, `mcell/CMakeLists.txt:356`) to the **same** system interpreter
   (`C:/mcell/tools/Python313/python3.exe`, 3.13.12). Zero `pybind11` mentions in CMake output.
 - **`mcell.pyd` itself links cleanly** — `mcell4_so` already lists `nanobind-static` (§11.5 #3),
   which is all the *module* needs.
@@ -624,7 +624,7 @@ already complete; this step only made both artifacts build and pass on Windows.
    linked `nanobind-static`. MSVC strictly resolves **every** external when linking an executable,
    so both failed with `LNK2001`/`LNK1120: 2 unresolved externals`. Fix: link `nanobind-static`,
    **Windows-guarded** (`$<$<PLATFORM_ID:Windows>:nanobind-static>`, listed last for link-order) on
-   `target_link_libraries(mcell …)` (`mcell/CMakeLists.txt:532`, the guarded entry at `:542`) and on
+   `target_link_libraries(mcell …)` (`mcell/CMakeLists.txt:541`, the guarded entry at `:551`) and on
    `data_model_to_pymcell` (`utils/data_model_to_pymcell/CMakeLists.txt:32`). GNU ld and macOS `dynamic_lookup` did not
    require this, so the Linux/macOS link lines are untouched. **This is the Windows generalization
    of §11.5 #3 from the module to the executable/utilities.**

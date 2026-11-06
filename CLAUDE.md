@@ -67,8 +67,8 @@ Key facts worth holding (details + citations in the wiki):
 - **No VTK.** Geometry analysis is in-tree and has no external dependency: counted volumes,
   compartment nesting, closedness, volumes, the parsable mesh-check warnings and the OBJ export.
   It lives in `MCell::geometry` (exact predicates + `GeometryAnalysis`), `MeshUtils` and
-  `CountedVolumeUtils`. The geometry files are C++23 and built without FP contraction (doc 04 §6;
-  history: doc 07).
+  `CountedVolumeUtils`. The geometry files are C++23, and all of MCell is built without FP
+  contraction, so ARM64 computes as x86-64 does (doc 04 §6; history: doc 07).
 - **Gotchas:** gcc-8.3.0 is hard-blocked (segfaults NFsim); nauty must stay static + C++-compiled
   or `mcell.so` fails to link; the BNGL parser is non-reentrant; `find_package(Python3 3.13 EXACT)`.
 

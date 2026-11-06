@@ -57,7 +57,7 @@
 | 2026-11-02 | Names: `vtk_utils` / `VtkUtils` became `counted_volume_utils` / `CountedVolumeUtils`. New mesh code goes into `MeshUtils`. |
 | 2026-10-29, 11-04 | **Mesh checks are warnings, never errors**, so that test runs never stop halfway. Each is one machine-parsable line, in five checks (A, B1, B2, C, D; doc 04 §6.5). Bow-tie and pinched vertices come later. |
 | 2026-11-04 | Fix the counted-volume crash found while checking the warning texts (§8). |
-| 2026-11-05 | The docs and the merge plan (this document); macOS and Windows checks on the user's machines. New header files use `.hpp`. After the macOS check: `bngl_exporter.cpp` without contraction, as part of the removal, and `diffuse_react_event.cpp` without contraction, as a separate fix (§8). |
+| 2026-11-05 | The docs and the merge plan (this document); macOS and Windows checks on the user's machines. New header files use `.hpp`. After the macOS check: `bngl_exporter.cpp` without contraction, as part of the removal, and `diffuse_react_event.cpp` without contraction, as a separate fix (§8). After the full-suite checks on macOS and Windows: all of MCell without contraction, the release number kept signed, and `molecules_not_species` initialized, each a separate fix (§8). New code uses C++ casts, not C-style casts; the ported predicates stay as they are. |
 
 ## 3. Phases and commits
 
@@ -75,7 +75,7 @@ All in `mcell` on `mcell4_nanobind_novtk` unless noted. Each phase was gated by 
 | 3 | VTK removed: code, CMake, the A/B check, and the build step (`mcell_tools` branch `mcell4_nanobind`). A separate commit renamed `vtk_utils` to `counted_volume_utils`. | `40c47842`, `f09b92e8`; `mcell_tools` `5fb3d0c` |
 | 4 | Mesh checks as parsable warnings. A separate commit first moved `get_mesh` and `get_clean_mesh` into `MeshUtils`. | `58bb5563`, `81b63cdf` |
 | fix | Counted volumes of intersecting objects that have a parent (§8). | `c3d77618`; `mcell_tests` `ba0ae972` |
-| 5 | The new headers renamed to `.hpp` (a rename only). `bngl_exporter.cpp` built without contraction, so that exported volumes are the same on every platform (§8). These docs; macOS and Windows checks. | `476ca1e1`, `cd6cc248`; the rest in progress |
+| 5 | The new headers renamed to `.hpp` (a rename only). `bngl_exporter.cpp` built without contraction, so that exported volumes are the same on every platform (§8). These docs; macOS and Windows checks. | `476ca1e1`, `cd6cc248`, `2273f3d4` (C++ casts); separate fixes from the platform checks: `229cbbfc`, `1bcebd23`, `2f99b5b0`, `0652d19b` (§8); the docs in progress |
 | 6 | Merge into `mcell4_nanobind`, and these docs into the wiki. | to do |
 
 ## 4. What replaced VTK
@@ -145,8 +145,18 @@ no simulation result. Only VTK's own errors, such as the reversed nesting, diffe
 - **A failed OBJ write** prints "Error: Could not write geometry to <prefix>.obj and <prefix>.mtl."
   and the run continues. VTK printed its own error and also continued.
 - **Initialization is faster** with many counted objects (§7). The build no longer contains VTK.
-- **On ARM64 (Apple silicon), results now match x86-64** where the macOS check found them
-  differing: four exported volumes that were 1 ULP off, and two tests that failed (§8).
+- **On ARM64 (Apple silicon), results now match x86-64.** All of MCell is built without
+  floating-point contraction, and negative releases remove molecules there too (§8). In the full
+  test suite on a Mac, the only test that still differs from Linux is a CellBlender example whose
+  converter script computes a vertex with Python's `math.sin`.
+- **Fixes found by the platform checks, visible in output** (§8):
+  - exported data models, and the MDL and Python generated from them, write a negative release
+    number as it is (`-50`), where they wrote it wrapped as an unsigned number (`4294967246`);
+  - the Python API accepts `number_to_release` up to 2147483647 (it accepted up to 4294967295, but
+    the release code stored the number in an `int` already); below -2147483647 there's a new
+    "too low" error;
+  - `data_model_to_pymcell -b` writes `Species` for count outputs of type "Molecule", where it wrote
+    `Species` or `Molecules` at random.
 
 ## 6. How it was checked
 
@@ -188,8 +198,19 @@ no simulation result. Only VTK's own errors, such as the reversed nesting, diffe
       fused multiply-adds;
     - all 34 warning and error models print what Linux prints;
     - in a first tier of 277 tests, every difference from Linux came from contraction in older
-      code (§8). After the two fixes, the statuses and all 192 exported BNGL files match Linux.
-  - **Windows:** part of phase 5.
+      code (§8). After the two fixes, the statuses and all 192 exported BNGL files match Linux;
+    - in the full suite (2,841 test runs), 56 test runs failed only on the Mac, all of them in the
+      build from before the removal too. After the fixes of §8, one is left: a CellBlender example
+      whose converter script uses Python's `math.sin`. All exported BNGL volumes match Linux.
+  - **Windows** (2026-11-05: Ryzen 7 5800X, Windows 11, MSVC 19.43, x64), on a copy of the build
+    root:
+    - the new code builds without warnings of its own; no fused multiply-adds anywhere (x64);
+    - in both tiers, no volume, area or compartment line differs from Linux;
+    - every other difference predates the removal or is the copy's: OBJ files with CRLF line
+      endings against LF references (VTK wrote CRLF too), one data-model path over Windows'
+      260-character limit, MCell3's log buffering splicing merged stdout and stderr, tests that need
+      `bash`, and tests skipped on Windows on purpose;
+    - it found the `molecules_not_species` bug (§8).
 
 ## 7. The numbers
 
@@ -244,13 +265,31 @@ showed both.
   `data_model/2800` and `data_model_pymcell4/0820` failed on Apple silicon. This is a separate fix,
   outside the removal: `229cbbfc` compiles `diffuse_react_event.cpp` without contraction.
 
-On Linux x86-64 both changes leave `mcell.so` byte-identical. Other MCell files still contract on
-ARM64. A build of the whole of MCell without contraction also matched Linux in those 277 tests, and
-is the next step if the full suite finds more differences there.
+On Linux x86-64 both changes leave `mcell.so` byte-identical.
+
+### Found by the full-suite checks
+
+The full suite on the Mac found 56 test runs that failed only there. On Windows, the full suite found
+one older bug. All of them predate the removal: the builds from before it fail the same way.
+- **Contraction in the rest of MCell** (30 test runs: 27 on the MCell3 engine, and pymcell4 1200,
+  3100 and 3150). `0652d19b` compiles all of MCell without contraction (`mcell/CMakeLists.txt:132-140`);
+  MCell3's code doesn't change, only how it's compiled. On Linux the binaries' code is identical.
+- **Negative releases did nothing on ARM64** (25 test runs: mdl 0380, 0385, 1320 and 1325 in six
+  testers, and pymcell4 1400). `ReleaseEvent::release_number` was a `uint` filled from a `double`.
+  Converting a negative `double` to an unsigned type is undefined: x86-64 happens to wrap it, and
+  the callers read it back as a negative `int`; ARM64 saturates it to 0. `2f99b5b0` keeps the
+  number signed, and both converters range-check it before a `static_cast`.
+- **`Species` or `Molecules` at random** (Windows). `bool molecules_not_species` in
+  `MCell4Generator::generate_counts` (`data_model_to_pymcell`) had no initializer, and count outputs
+  of type "Molecule" in BNGL mode read it uninitialized. `1bcebd23` initializes it to `false`
+  (`Species`), as the Python generator counts the same outputs.
+
+After these fixes, the full suite on the Mac differs from Linux in one test: a CellBlender example
+whose converter script computes a vertex with Python's `math.sin`, which differs in the last digit.
 
 ## 9. What is left, and where the records are
 
-- **Next:** phase 5 (these docs; the macOS and Windows checks) and phase 6 (the merge into
+- **Next:** phase 5's review of these docs, and phase 6 (the merge into
   `mcell4_nanobind`). In phase 6 the `mcell4_nanobind` root switches its `mcell_tools` to branch
   `mcell4_nanobind`, which has no VTK step. `mcell4_dev` keeps building VTK for the `mcell4_dev`
   root until the removal reaches it.

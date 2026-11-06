@@ -327,15 +327,15 @@ Supporting hand-written infrastructure:
 ## 4. nanobind module assembly (`mcell4_so`)
 
 The module is assembled by **`nanobind_add_module(mcell4_so …)`**
-(`mcell/CMakeLists.txt:488`; nanobind is found via `find_package(nanobind CONFIG)`
-at `:350` against the vendored `libs/nanobind`). Crucially, the *only* libmcell-API
+(`mcell/CMakeLists.txt:497`; nanobind is found via `find_package(nanobind CONFIG)`
+at `:359` against the vendored `libs/nanobind`). Crucially, the *only* libmcell-API
 file listed in that target is `libmcell/api/exports.cpp` — all the actual bindings
 come in by **linking the `libmcell` static library** (`target_link_libraries(mcell4_so
-PUBLIC MCell::libmcell …)`, `mcell/CMakeLists.txt:554`), which compiles all the
+PUBLIC MCell::libmcell …)`, `mcell/CMakeLists.txt:563`), which compiles all the
 `gen_*.cpp` binding functions and the hand-written `api/bindings.cpp`. Because
 nanobind has a **static support library** (`nanobind-static`) where pybind11 was
 header-only, `mcell4_so` also links `nanobind-static` *after* `libmcell`
-(`mcell/CMakeLists.txt:560`) so the support symbols resolve under GNU ld's link order.
+(`mcell/CMakeLists.txt:569`) so the support symbols resolve under GNU ld's link order.
 
 `api/exports.cpp` is a deliberate workaround (`exports.cpp:1`): it just declares
 `extern "C" void PyInit_mcell();` and references it from a static initializer so
@@ -356,17 +356,17 @@ NB_MODULE(mcell, m) {
 }
 ```
 
-`mcell4_so` properties (`mcell/CMakeLists.txt:564-571`): `PREFIX ""`,
+`mcell4_so` properties (`mcell/CMakeLists.txt:573-580`): `PREFIX ""`,
 `OUTPUT_NAME "mcell"`, `SUFFIX ".so"` (`.pyd` on Windows) — this explicit override
 deliberately wins over the versioned suffix `nanobind_add_module` would otherwise
 apply, so a plain `mcell.so`/`mcell.pyd` is produced — position-independent.
 The result is `<build>/lib/mcell.so` (`CMAKE_LIBRARY_OUTPUT_DIRECTORY`,
-`mcell/CMakeLists.txt:362`).
+`mcell/CMakeLists.txt:371`).
 
 **Package layout for `import mcell`:** there is no Python *package* directory —
 `mcell.so` is a single extension module placed directly on the path, accompanied
 by the `mcell.pyi` stub. CMake `configure_file`s the checked-in stub
-`libmcell/generated/mcell.pyi` → `<build>/utils/mcell.pyi` (`mcell/CMakeLists.txt:482`).
+`libmcell/generated/mcell.pyi` → `<build>/utils/mcell.pyi` (`mcell/CMakeLists.txt:491`).
 Users `import mcell` after adding the directory containing `mcell.so` to
 `sys.path` (in the bundle, the mcell install dir; the `.pyi` rides alongside for
 IDE/type-checker support).
@@ -475,40 +475,41 @@ Build-orchestration view (dep internals are covered in the libbng/nfsim docs):
 
 - **Python discovery** — `find_package(Python3 … EXACT)` (`:10`) and, for
   nanobind, a capital-P `find_package(Python … EXACT)` pinned to the same
-  interpreter (`set(Python_EXECUTABLE ${Python3_EXECUTABLE})`, `:347-348`);
-  `find_package(nanobind CONFIG)` against the vendored `libs/nanobind` (`:350`).
+  interpreter (`set(Python_EXECUTABLE ${Python3_EXECUTABLE})`, `:356-357`);
+  `find_package(nanobind CONFIG)` against the vendored `libs/nanobind` (`:359`).
   There is no `find_package(VTK)`: the geometry analysis that replaced VTK is
   in-tree (doc 04 §6).
 - **Bundled subdirectories** via `add_subdirectory`:
-  `libs/jsoncpp` (`:48`), sibling `../libbng` (`:352`), `../nfsim` (`:354`),
-  `../nfsimCInterface` (`:355`), `libmcell` (`:357`), `src4` (`:358`). Plus
-  `utils/data_model_to_pymcell` and `utils/` (`:550-551`). nanobind is **not** an
+  `libs/jsoncpp` (`:48`), sibling `../libbng` (`:361`), `../nfsim` (`:363`),
+  `../nfsimCInterface` (`:364`), `libmcell` (`:366`), `src4` (`:367`). Plus
+  `utils/data_model_to_pymcell` and `utils/` (`:559-560`). nanobind is **not** an
   `add_subdirectory` — it comes in via `find_package` above (`libs/pybind11` was
   removed in the migration). nanobind's include dirs are added to
-  `mcell_project_options` (`:138`).
+  `mcell_project_options` (`:147`).
 - **Shared flags** — a single `mcell_project_options` INTERFACE target
-  (`:73-131`) carries the C++ standard (`MCELL_CXX_STANDARD`, default 17),
-  warnings, `-fpermissive`, optimization, and `-DPYTHON_VERSION=…`; linked
+  (`:73-140`) carries the C++ standard (`MCELL_CXX_STANDARD`, default 17),
+  warnings, `-fpermissive`, optimization, no floating-point contraction (`-ffp-contract=off`,
+  `:132-140`), and `-DPYTHON_VERSION=…`; linked
   `PRIVATE` into every first-party + bundled target, `mcell_geometry` included
-  (`:578-587`). The geometry files add per-file flags on top: C++23 and no
+  (`:587-596`). The geometry files add per-file flags on top: C++23 and no
   floating-point contraction. So do two engine files whose results must not depend on the
   platform: no contraction for `bngl_exporter.cpp` and `diffuse_react_event.cpp`
   (`src4/CMakeLists.txt:42-108`, doc 04 §6.6).
 - **Code-gen at configure time** — flex/bison for the MDL parser/scanner
-  (`:297-317`), `version_flags.h` (`:244-283`) and `version.h` (`:321-335`) generation.
+  (`:306-326`), `version_flags.h` (`:253-292`) and `version.h` (`:330-344`) generation.
 - **Two binary targets:**
-  - **`mcell`** executable (`add_executable`, `:509`) — the standalone MDL-based
+  - **`mcell`** executable (`add_executable`, `:518`) — the standalone MDL-based
     CLI, forced to the build root, links
     `MCell::mcell4 MCell::libmcell_dummy BNG::bng NFsimC::NFsimC NFsim::NFsim
-    JsonCpp::JsonCpp Nauty::nauty` (`:532-543`); `MCell::mcell4` brings the static
+    JsonCpp::JsonCpp Nauty::nauty` (`:541-552`); `MCell::mcell4` brings the static
     geometry library `MCell::geometry` with it. On **macOS** it does not link the static Python lib —
     Python C-API symbols are left undefined and resolved at runtime via
-    `target_link_options(mcell PRIVATE …-undefined,dynamic_lookup)` (`:548`, the
+    `target_link_options(mcell PRIVATE …-undefined,dynamic_lookup)` (`:557`, the
     direct replacement for the old `pybind11::python_link_helper`). On **Windows**
     it (and `data_model_to_pymcell`) must additionally link `nanobind-static`
-    (`:542`) — MSVC resolves every external when linking an executable.
-  - **`mcell4_so`** module (`nanobind_add_module`, `:488`) — the Python `.so`,
-    links `MCell::libmcell` (twice, for link-ordering, `:554-560`) + `nanobind-static`
+    (`:551`) — MSVC resolves every external when linking an executable.
+  - **`mcell4_so`** module (`nanobind_add_module`, `:497`) — the Python `.so`,
+    links `MCell::libmcell` (twice, for link-ordering, `:563-569`) + `nanobind-static`
     + `mcell4` (with `MCell::geometry`) + deps.
 
 ## 7. Static Python 3.13 + `uv`
@@ -584,7 +585,7 @@ alias such as `mp` may point at another root's venv — check before relying on 
 Two families of Python tooling are copied into the build tree (not generated):
 
 - **`mcell/src/rules_py/*.py`** → `configure_file`'d into `<build>/`
-  (`mcell/CMakeLists.txt:467-478`): `grammar_definition.py`, `mdlr2mdl.py`,
+  (`mcell/CMakeLists.txt:476-487`): `grammar_definition.py`, `mdlr2mdl.py`,
   `mcell3r.py`, `nfsim_python.py`, `read_mdl.py`, `write_mdl.py`,
   `read_bngxml.py`/`split_bngxml.py`/`write_bngxmle.py`, `small_structures.py`,
   `postprocess_mcell3r.py`. These convert **MDLr** (rule-based MDL) into plain MDL
@@ -594,7 +595,7 @@ Two families of Python tooling are copied into the build tree (not generated):
   `mcell4_generator.cpp`, `python_generator.cpp`, `bngl_generator.cpp` — converts a
   CellBlender **data model** JSON into a pymcell4 Python script) and `utils/`
   itself (`mcell4_runner`, `bng_analyzer`, plotting/visualization helpers). `bng2/`
-  (BioNetGen) is copied to `<build>/bng2/` (`mcell/CMakeLists.txt:486`).
+  (BioNetGen) is copied to `<build>/bng2/` (`mcell/CMakeLists.txt:495`).
   - **The generated `model.py` guards its run block.** `MCell4Generator::generate_model`
     (`mcell/utils/data_model_to_pymcell/mcell4_generator.cpp:1245`) wraps the
     "initialization and execution" section in `if __name__ != '__mp_main__':` (`:1341`).

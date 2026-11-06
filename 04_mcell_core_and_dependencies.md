@@ -82,12 +82,12 @@ stay consistent during translation.
 
 ### 1.3 Which engine each artifact uses
 
-- The **`mcell` executable** (`add_executable(mcell ...)`, `mcell/CMakeLists.txt:509-515`) is
+- The **`mcell` executable** (`add_executable(mcell ...)`, `mcell/CMakeLists.txt:518-524`) is
   built from the MCell3 C sources + the MDL bison/flex outputs, and links the
   shared `MCell::mcell4` static engine library. Default MDL runs flow
   MCell3-parse → convert → MCell4-run.
 - The **`mcell4_so` Python module** (`nanobind_add_module(mcell4_so ...)`,
-  `mcell/CMakeLists.txt:488`, entry `libmcell/api/exports.cpp`, import name `mcell`) is
+  `mcell/CMakeLists.txt:497`, entry `libmcell/api/exports.cpp`, import name `mcell`) is
   the pure MCell4 path: the Python API builds an MCell4 `World` directly via
   `libmcell`, with **no** MCell3/MDL involved.
 - Both link the common static engine library **`mcell4`**
@@ -563,8 +563,8 @@ depends on nothing else in MCell, so `data_model_to_pymcell` can link it on its 
     `Disjoint`.
 - **No floating-point contraction** in `predicates.cpp` and `geometry_analysis.cpp` (§6.6). Fused
   multiply-add breaks the predicates' error-free arithmetic, and it would change the volume's last
-  bits from one platform to another. The BNGL export's last step (`bngl_exporter.cpp`) is compiled
-  the same way, so exported volumes are identical on every platform.
+  bits from one platform to another. All of MCell is now compiled without contraction (§6.6), so
+  exported volumes, and simulations, are the same on ARM64 as on x86-64.
 
 ### 6.5 Errors and warnings that users see
 
@@ -620,8 +620,13 @@ appear there. Bow-tie and pinched vertices are not checked yet (doc 07).
     for MSVC; `/clang:-ffp-contract=off` for clang-cl, which contracts even with `/fp:precise`.
   - `mesh_utils.cpp` includes glm through MCell's headers, so glm's deprecated-volatile warning is
     switched off for it (`MCELL_CXX23_GLM`, `src4/CMakeLists.txt:81-89`).
-  - Two engine files are compiled without contraction too (`src4/CMakeLists.txt:91-108`), so
-    that their results are the same on every platform. The macOS check found both (doc 07 §8):
+  - **All of MCell** is compiled without contraction since `0652d19b`: `mcell_project_options`
+    passes `-ffp-contract=off` (`/clang:-ffp-contract=off` for clang-cl) to every first-party and
+    bundled target (`mcell/CMakeLists.txt:132-140`). On x86-64 the code doesn't change. On ARM64 it
+    makes MCell compute as on x86-64: the macOS full-suite check found 30 test runs that failed
+    only there because of contraction (doc 07 §8).
+  - Before that, two engine files were switched off on their own, and still are
+    (`src4/CMakeLists.txt:91-108`). The macOS check found both (doc 07 §8):
     - `bngl_exporter.cpp`: a compartment's exported volume is its volume times `length_unit^3`
       minus its children's volumes, one multiply-subtract;
     - `diffuse_react_event.cpp`: the tile-neighbor search across a shared edge
@@ -775,9 +780,9 @@ positional argument is the MDL filename (`:381-406`).
 `NB_MODULE(mcell, m)` is defined in `libmcell/api/bindings.cpp:176`; the module's
 import name is **`mcell`**. The CMake target is `mcell4_so`
 (`nanobind_add_module(mcell4_so ... libmcell/api/exports.cpp)`,
-`mcell/CMakeLists.txt:488`), with its output name forced to `mcell` and suffix `.so`/`.pyd`
-(`:564-570`). This module links `MCell::libmcell` + `nanobind-static` + `MCell::mcell4`
-(the same engine the executable uses, with `MCell::geometry`, §6.6) plus BNG/JsonCpp/Nauty (`:554-560`). The binding details
+`mcell/CMakeLists.txt:497`), with its output name forced to `mcell` and suffix `.so`/`.pyd`
+(`:573-579`). This module links `MCell::libmcell` + `nanobind-static` + `MCell::mcell4`
+(the same engine the executable uses, with `MCell::geometry`, §6.6) plus BNG/JsonCpp/Nauty (`:563-569`). The binding details
 (`define_pybinding_*`, code-generated wrappers) are covered by the libmcell document — for
 this reference it is enough to note that `mcell4_so` is the Python entry point and drives
 the *same* MCell4 `World` engine, just constructed directly from the Python API instead of

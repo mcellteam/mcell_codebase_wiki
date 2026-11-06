@@ -213,9 +213,10 @@ annotated class example, and the regeneration/build commands are in **doc 05**.
   they are not standalone units; changing them recompiles their includers. (doc 04)
 - **Exact Python version coupling:** `find_package(Python3 3.13 EXACT)` — the module is ABI-bound
   to the specific statically-built 3.13. (doc 05)
-- **The geometry files are C++23 and built without floating-point contraction**, and so are
-  `bngl_exporter.cpp` and `diffuse_react_event.cpp`. The per-file flags are in
-  `src4/CMakeLists.txt:42-108`: keep them when moving files or adding geometry code. Fused
+- **MCell is built without floating-point contraction** (`mcell/CMakeLists.txt:132-140`), and the
+  geometry files are C++23. The geometry files and `bngl_exporter.cpp` and
+  `diffuse_react_event.cpp` also carry per-file flags (`src4/CMakeLists.txt:42-108`): keep them
+  when moving files or adding geometry code. Fused
   multiply-add breaks the exact predicates and changes the last bits of volumes, and of
   simulations on ARM64. Mesh edges
   are matched by exact coordinates, not by vertex index. (doc 04 §6)
