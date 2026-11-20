@@ -494,7 +494,7 @@ Build-orchestration view (dep internals are covered in the libbng/nfsim docs):
   (`:587-596`). The geometry files add per-file flags on top: C++23 and no
   floating-point contraction. So do two engine files whose results must not depend on the
   platform: no contraction for `bngl_exporter.cpp` and `diffuse_react_event.cpp`
-  (`src4/CMakeLists.txt:42-108`, doc 04 §6.6).
+  (`src4/CMakeLists.txt:42-110`, doc 04 §6.10).
 - **Code-gen at configure time** — flex/bison for the MDL parser/scanner
   (`:306-326`), `version_flags.h` (`:253-292`) and `version.h` (`:330-344`) generation.
 - **Two binary targets:**
@@ -594,7 +594,8 @@ Two families of Python tooling are copied into the build tree (not generated):
   `utils/data_model_to_pymcell` (the `data_model_to_pymcell` target:
   `mcell4_generator.cpp`, `python_generator.cpp`, `bngl_generator.cpp` — converts a
   CellBlender **data model** JSON into a pymcell4 Python script) and `utils/`
-  itself (`mcell4_runner`, `bng_analyzer`, plotting/visualization helpers). `bng2/`
+  itself (`mcell4_runner`, `bng_analyzer`, `mesh_utils_test`, the test program of the mesh
+  checks (doc 04 §6.11), plotting/visualization helpers). `bng2/`
   (BioNetGen) is copied to `<build>/bng2/` (`mcell/CMakeLists.txt:495`).
   - **The generated `model.py` guards its run block.** `MCell4Generator::generate_model`
     (`mcell/utils/data_model_to_pymcell/mcell4_generator.cpp:1245`) wraps the

@@ -64,11 +64,17 @@ Key facts worth holding (details + citations in the wiki):
   `mcell/libmcell/generated/gen_*.{h,cpp}` + `mcell.pyi`. Regenerate with
   `cd mcell/libmcell/definition && python3 gen.py` (NOT a CMake step). Never hand-edit
   `generated/`; behavior subclasses live in `libmcell/api/` (`X : public GenX`).
-- **No VTK.** Geometry analysis is in-tree and has no external dependency: counted volumes,
-  compartment nesting, closedness, volumes, the parsable mesh-check warnings and the OBJ export.
-  It lives in `MCell::geometry` (exact predicates + `GeometryAnalysis`), `MeshUtils` and
-  `CountedVolumeUtils`. The geometry files are C++23, and all of MCell is built without FP
-  contraction, so ARM64 computes as x86-64 does (doc 04 §6; history: doc 07).
+- **No VTK; connectivity from vertex indices.** The geometry code is in-tree and has no external
+  dependency.
+  - MCell4 takes each wall's neighbours only from the walls' vertex indices, never from
+    coordinates. It checks every geometry object's mesh at initialization and writes a geometry
+    report; errors stop the run, warnings don't, and no mesh is ever repaired.
+  - The same code does the counted volumes, compartment nesting, volumes and areas, and the OBJ
+    export.
+  - It lives in `MCell::geometry` (exact predicates, `GeometryAnalysis`, and the `MeshTable` with
+    the checks in `mesh_table`), `MeshUtils` and `CountedVolumeUtils`.
+  - The geometry files are C++23, and all of MCell is built without FP contraction, so ARM64
+    computes as x86-64 does (doc 04 §6; history: docs 07 and 08).
 - **Gotchas:** gcc-8.3.0 is hard-blocked (segfaults NFsim); nauty must stay static + C++-compiled
   or `mcell.so` fails to link; the BNGL parser is non-reentrant; `find_package(Python3 3.13 EXACT)`.
 
@@ -100,7 +106,8 @@ points at the *wrong directory* but whose filename still exists somewhere is **n
 - It reliably catches deleted/renamed files and out-of-range line numbers.
 - It will **not** catch a path-prefix mistake (right filename, wrong folder). Use the change→doc
   reminder + a human spot-check (MAINTENANCE.md §5) for those.
-It also skips shorthand/placeholders (`foo.h/.cpp`, `gen_x.h`) and resolves repo-relative paths
+It also skips shorthand/placeholders (`foo.h/.cpp`, `gen_x.h`) and MCell's output paths under
+`reports/` (the samples of doc 04 §6.3), and resolves repo-relative paths
 (`api/bindings.cpp` → `mcell/libmcell/api/bindings.cpp`) via a whole-tree file index.
 
 ## How to modify the tooling (when docs or watched areas change)

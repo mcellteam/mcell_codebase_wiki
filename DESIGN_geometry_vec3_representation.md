@@ -122,7 +122,7 @@ Three coherent options, in increasing ambition:
 - **`.pyi` stub + RST docs** — regenerated; type annotations change (`List[Vec3]` / `numpy.ndarray`).
 
 ### 5.2 The CellBlender data-model → pymcell4 path (mcell utility)
-- **`utils/data_model_to_pymcell/`** (`python_generator.cpp:744`, `data_model_geometry.cpp:31-47`):
+- **`utils/data_model_to_pymcell/`** (`python_generator.cpp:744`, `data_model_geometry.cpp:32-48`):
   reads `KEY_VERTEX_LIST` / `KEY_ELEMENT_CONNECTIONS` from the **JSON data model** and *generates
   pymcell4 Python source*. It emits the literal Python for `vertex_list`. **It must be updated to
   emit the new API form** (under C3, the existing `[[x,y,z],…]` literal still works → minimal/no change).

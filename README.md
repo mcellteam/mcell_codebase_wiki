@@ -27,7 +27,7 @@ reading guide (with suggested entry paths by task).
 | 01 | [`01_libbng.md`](01_libbng.md) | **libbng** — the BioNetGen-Language library (`BNG::`): species/complex graphs, rule application, BNGL parser, nauty canonicalization |
 | 02 | [`02_nfsim.md`](02_nfsim.md) | **NFsim** — the network-free stochastic simulator (vendored C++ engine) |
 | 03 | [`03_nfsimCInterface.md`](03_nfsimCInterface.md) | **nfsimCInterface** — the `extern "C"` bridge MCell3 uses to drive NFsim |
-| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, entry points, how libbng / NFsim are consumed, and the in-tree geometry analysis that replaced VTK (§6) |
+| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, entry points, how libbng / NFsim are consumed, and the geometry code: mesh checks, connectivity from vertex indices, and the in-tree analysis that replaced VTK (§6) |
 | 05 | [`05_mcell_python_api_and_build.md`](05_mcell_python_api_and_build.md) | **Python API & build** — the YAML→C++/nanobind codegen, `mcell_tools` orchestration, the CMake build graph, static Python 3.13 + `uv` |
 | 06 | [`06_nanobind_migration_feasibility.md`](06_nanobind_migration_feasibility.md) | **pybind11→nanobind migration** — the feasibility study and the executed, validated port (Linux/macOS/Windows; `libs/pybind11` removed) |
 | 07 | [`07_vtk_removal.md`](07_vtk_removal.md) | **The VTK removal** (2026) — why VTK went, the decisions, what changed for users, how it was checked, the numbers |

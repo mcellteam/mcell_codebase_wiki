@@ -22,7 +22,7 @@
 | 01 | [`01_libbng.md`](01_libbng.md) | **libbng** — BioNetGen-Language library (`BNG::`): species/complex graphs, rule application, BNGL parser, nauty canonicalization |
 | 02 | [`02_nfsim.md`](02_nfsim.md) | **NFsim** — the network-free stochastic simulator (vendored C++ engine) |
 | 03 | [`03_nfsimCInterface.md`](03_nfsimCInterface.md) | **nfsimCInterface** — the `extern "C"` bridge MCell3 uses to drive NFsim |
-| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, how libbng / NFsim are consumed, and the in-tree **geometry analysis** that replaced VTK (§6, self-contained) |
+| 04 | [`04_mcell_core_and_dependencies.md`](04_mcell_core_and_dependencies.md) | **MCell core** — the two engines (MCell3 `src/`, MCell4 `src4/`), the main loop, how libbng / NFsim are consumed, and the **geometry code**: mesh checks, connectivity from vertex indices, and the in-tree analysis that replaced VTK (§6, self-contained) |
 | 05 | [`05_mcell_python_api_and_build.md`](05_mcell_python_api_and_build.md) | **Python API generation & build** — the YAML→C++/nanobind codegen, `mcell_tools` build orchestration, static-Python 3.13 + uv |
 | 06 | [`06_nanobind_migration_feasibility.md`](06_nanobind_migration_feasibility.md) | **pybind11→nanobind migration** — feasibility study + the **executed** port (done & validated on Linux/macOS/Windows, `libs/pybind11` removed); MI is a non-issue; gains are build/dev ergonomics, not runtime |
 | 07 | [`07_vtk_removal.md`](07_vtk_removal.md) | **The VTK removal** (2026) — why VTK went, the decisions, what changed for users, how it was checked, the numbers; the record behind doc 04 §6 |
@@ -93,7 +93,7 @@ mcell/CMakeLists.txt
 ├── add_subdirectory(../nfsimCInterface) # → NFsimC::NFsimC                     [doc 03]
 ├── add_subdirectory(libmcell)           # → MCell::libmcell (the Python API)  [doc 05]
 └── add_subdirectory(src4)               # → MCell::mcell4 (the engine)        [doc 04]
-                                         #   + MCell::geometry (geometry analysis, static; linked by mcell4) [doc 04 §6]
+                                         #   + MCell::geometry (mesh checks, geometry analysis; static; linked by mcell4) [doc 04 §6]
 
 Targets produced here:
   ├── add_executable(mcell …)            # MCell3 C sources + MDL flex/bison + links everything below
@@ -123,18 +123,24 @@ Targets produced here:
 | **libbng** | C++17 / `BNG::` | mcell's CMake (`add_subdirectory`) | `BNG::bng`, `Nauty::nauty` | **Direct C++ API** from MCell4 (`src4`) and libmcell |
 | **NFsim** | C++ / `NFcore::`,`NFapi` | mcell's CMake | `NFsim::NFsim` (+ static/pic/EXE) | **Indirect** — only through nfsimCInterface |
 | **nfsimCInterface** | C ABI (`extern "C"`) | mcell's CMake | `NFsimC::NFsimC` | **Direct C calls** from MCell3 (`src/*nfsim*.c`) |
-| **Geometry analysis** (in-tree; replaced VTK) | C++23 / `MCell::GeometryAnalysis`, `MCell::Predicates` | mcell's CMake (`src4`) | `MCell::geometry` (static; via `MCell::mcell4`) | **Direct C++ API** from `src4` (`counted_volume_utils`, `mesh_utils`, `Region`), libmcell and `data_model_to_pymcell` |
+| **Geometry** (in-tree; replaced VTK) | C++23 / `MCell::GeometryAnalysis`, `MCell::Predicates`, `MCell::MeshUtils` | mcell's CMake (`src4`) | `MCell::geometry` (static; via `MCell::mcell4`) | **Direct C++ API** from `src4` (the converters' checks, `GeometryObject`, `Region`, `counted_volume_utils`, `mesh_utils`), libmcell, `data_model_to_pymcell` and `mesh_utils_test` |
 
-### Geometry analysis — in-tree since the VTK removal
+### Geometry — in-tree, with connectivity from vertex indices
 Until 2026 MCell used eight VTK modules for geometry analysis and OBJ export. The in-tree code that
 replaced them has no external dependency:
-- `MCell::geometry`, a static library: Shewchuk's exact predicates and `GeometryAnalysis`;
+- `MCell::geometry`, a static library: Shewchuk's exact predicates, `GeometryAnalysis`, and the
+  `MeshTable` with the mesh checks (`mesh_table`);
 - `MeshUtils` and `CountedVolumeUtils`.
 
-It does the counted-volume containment hierarchy, compartment nesting, the closedness checks,
-volumes and areas (releases by concentration, BNGL export, `data_model_to_pymcell`), the
-parsable mesh-check warnings, and the Wavefront-OBJ export. There is no rendering. Reference:
-**doc 04 §6** (self-contained). History and reasons: **doc 07**.
+MCell4 takes each wall's neighbours only from the walls' vertex indices, never from coordinates.
+- **It checks every geometry object's mesh** at initialization and writes a geometry report.
+  Errors stop the run; warnings don't. It never repairs a mesh.
+- **The same code does** the counted-volume containment hierarchy, compartment nesting, volumes
+  and areas (releases by concentration, the BNGL export, `data_model_to_pymcell`, the Python API's
+  getters), and the Wavefront-OBJ export. There is no rendering.
+
+Reference: **doc 04 §6** (self-contained). History and reasons: **doc 07** (the VTK removal) and
+**doc 08** (the vertex-index project).
 
 ---
 
@@ -215,11 +221,11 @@ annotated class example, and the regeneration/build commands are in **doc 05**.
   to the specific statically-built 3.13. (doc 05)
 - **MCell is built without floating-point contraction** (`mcell/CMakeLists.txt:132-140`), and the
   geometry files are C++23. The geometry files and `bngl_exporter.cpp` and
-  `diffuse_react_event.cpp` also carry per-file flags (`src4/CMakeLists.txt:42-108`): keep them
+  `diffuse_react_event.cpp` also carry per-file flags (`src4/CMakeLists.txt:42-110`): keep them
   when moving files or adding geometry code. Fused
   multiply-add breaks the exact predicates and changes the last bits of volumes, and of
-  simulations on ARM64. Mesh edges
-  are matched by exact coordinates, not by vertex index. (doc 04 §6)
+  simulations on ARM64. Walls are joined only through their vertex indices, never by
+  coordinates; equal coordinates give only a warning. (doc 04 §6)
 
 ---
 

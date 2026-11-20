@@ -58,7 +58,7 @@ from pathlib import Path
 # in the wiki dir, so renaming a doc's title does not break this.
 RULES = [
     # mcell repo internals
-    ("mcell", r"^src4/(predicates|geometry_analysis|mesh_utils|counted_volume_utils)\.",
+    ("mcell", r"^src4/(predicates|geometry_analysis|mesh_table|mesh_utils|counted_volume_utils)\.",
                                                   ["04", "00"], "geometry analysis"),
     ("mcell", r"^src4/",                          ["04", "00"], "MCell4 engine"),
     ("mcell", r"^src/.*nfsim",                    ["03", "04", "00"], "MCell3 NFsim glue"),
@@ -148,6 +148,10 @@ def _is_placeholder(rel: str) -> bool:
     # skip shorthand/placeholders, not real files:
     #   foo.h/.cpp (a slash right after a dot), src/.../x.cpp, gen_x.h, x.cpp
     if "/." in rel or "..." in rel:
+        return True
+    # MCell's output, not a source file: the reports a run writes, such as
+    # reports/geometry_report_00001.txt in the samples of doc 04 §6.3
+    if rel.startswith("reports/"):
         return True
     base = rel.rsplit("/", 1)[-1]
     if base.startswith("."):           # hidden / empty-stem like ".py"

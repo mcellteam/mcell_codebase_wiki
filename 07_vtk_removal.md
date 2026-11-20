@@ -1,5 +1,8 @@
 # 07 — The VTK Removal (record, 2026)
 
+> **Later:** the vertex-index project (doc 08) replaced the mesh checks and the matching of edges
+> by coordinates recorded here; doc 04 §6 describes the code as it is now.
+>
 > **What happened.** MCell no longer uses VTK. VTK used to compute MCell's geometry analysis: the
 > counted-volume hierarchy, compartment nesting, closedness, and the volumes for the BNGL export and
 > `data_model_to_pymcell`. It also wrote MCell's OBJ export. In-tree code with no external
@@ -55,7 +58,7 @@
 | 2026-10-29, -30 | **Errors for counted objects.** Counting inside an open surface is an error. A surface with a boundary is fine to simulate, and only counting inside it is impossible. An edge shared by three or more triangles (a non-manifold edge, a different fault from an open surface) is an error, and takes precedence. |
 | 2026-11-02 | **Edges are matched by exact coordinates**, as VTK's cleaning and MCell's wall linking do. Phase 4 adds a warning where vertex indices and coordinates disagree, and matching by vertex index is a later project. Every Python API object gets the non-manifold check. MDL models on the MCell4 engine get the counted-object errors, but MCell3 runs them as before. |
 | 2026-11-02 | Names: `vtk_utils` / `VtkUtils` became `counted_volume_utils` / `CountedVolumeUtils`. New mesh code goes into `MeshUtils`. |
-| 2026-10-29, 11-04 | **Mesh checks are warnings, never errors**, so that test runs never stop halfway. Each is one machine-parsable line, in five checks (A, B1, B2, C, D; doc 04 §6.5). Bow-tie and pinched vertices come later. |
+| 2026-10-29, 11-04 | **Mesh checks are warnings, never errors**, so that test runs never stop halfway. Each is one machine-parsable line, in five checks (A, B1, B2, C, D; doc 04 §6.9). Bow-tie and pinched vertices come later. |
 | 2026-11-04 | Fix the counted-volume crash found while checking the warning texts (§8). |
 | 2026-11-05 | The docs and the merge plan (this document); macOS and Windows checks on the user's machines. New header files use `.hpp`. After the macOS check: `bngl_exporter.cpp` without contraction, as part of the removal, and `diffuse_react_event.cpp` without contraction, as a separate fix (§8). After the full-suite checks on macOS and Windows: all of MCell without contraction, the release number kept signed, and `molecules_not_species` initialized, each a separate fix (§8). New code uses C++ casts, not C-style casts; the ported predicates stay as they are. |
 
@@ -139,7 +142,7 @@ no simulation result. Only VTK's own errors, such as the reversed nesting, diffe
   - one line each, `Warning: [CODE] name: text`, parsable with `^Warning: \[([A-Z_]+)\] (\S+):
     (.*)$`;
   - codes: `MESH_INCONSISTENT_ORIENTATION`, `MESH_INSIDE_OUT`, `MESH_DUPLICATE_VERTICES` and
-    `REGION_NOT_CLOSED` (doc 04 §6.5);
+    `REGION_NOT_CLOSED` (doc 04 §6.9);
   - the run continues. No test in the default suite (`test_configs/default.toml`, with
     `mcell_tests_private`) triggers any of them.
 - **A failed OBJ write** prints "Error: Could not write geometry to <prefix>.obj and <prefix>.mtl."
