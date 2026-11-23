@@ -26,6 +26,7 @@
 | 05 | [`05_mcell_python_api_and_build.md`](05_mcell_python_api_and_build.md) | **Python API generation & build** — the YAML→C++/nanobind codegen, `mcell_tools` build orchestration, static-Python 3.13 + uv |
 | 06 | [`06_nanobind_migration_feasibility.md`](06_nanobind_migration_feasibility.md) | **pybind11→nanobind migration** — feasibility study + the **executed** port (done & validated on Linux/macOS/Windows, `libs/pybind11` removed); MI is a non-issue; gains are build/dev ergonomics, not runtime |
 | 07 | [`07_vtk_removal.md`](07_vtk_removal.md) | **The VTK removal** (2026) — why VTK went, the decisions, what changed for users, how it was checked, the numbers; the record behind doc 04 §6 |
+| 08 | [`08_vertex_index.md`](08_vertex_index.md) | **Edge connectivity by vertex index** (2026) — why MCell4 links walls only through their vertex indices and checks every mesh, the decisions, what changed for users of each front end, the fixed issues, how it was checked, the numbers; the record behind doc 04 §6 |
 | — | [`MAINTENANCE.md`](MAINTENANCE.md) | **How to keep this wiki current** — change→document map, regeneration triggers, drift-detection checklist. Read this before editing the wiki or after changing the code. |
 
 **Suggested entry paths:**
@@ -33,7 +34,7 @@
 - *"I need to add/modify a Python API class"* → 05 (YAML codegen) then 04 (engine objects it wraps).
 - *"I need to touch chemistry / species / reactions"* → 01 (libbng) then 04 §"How MCell4 uses libbng".
 - *"I need to fix network-free (NFsim) behavior"* → 03 (C boundary) then 02 (engine) — note this is an **MCell3-only** path.
-- *"I need to change geometry handling, meshes, or OBJ export"* → 04 §6 (history and reasons: 07).
+- *"I need to change geometry handling, meshes, or OBJ export"* → 04 §6 (history and reasons: 07 and 08).
 - *"I need to build/package/release"* → 05 Part B.
 
 ---
@@ -44,8 +45,10 @@
 simulator. The build produces **two artifacts from one source tree**:
 
 1. **`mcell`** — a standalone **executable**. Front-end: the legacy **MCell3** code (C compiled
-   as C++) which parses **MDL** text files. It can run the old MCell3 engine directly or convert
-   the parsed model into MCell4 and run that. It is the only path that can use **NFsim**.
+   as C++) which parses **MDL** text files. An MDL file takes one of two paths: **MCell3's engine**
+   (`mcell file.mdl`) runs the parsed model on the old MCell3 engine; **MCell4's MDL path**
+   (`mcell -mcell4 file.mdl`) converts it into MCell4 and runs that. MCell3's engine is the only
+   path that can use **NFsim**.
 2. **`mcell.so`** — a **Python module** (`import mcell`), CMake target `mcell4_so`, built with
    **nanobind** (migrated from pybind11 — doc 06). Front-end: the code-generated Python API in `libmcell/`. It builds an MCell4
    `World` directly from Python objects — no MDL, no NFsim.
@@ -183,8 +186,10 @@ This is the cross-cutting view; each arrow is detailed in the linked doc.
   Python `Model` into an MCell4 `World`.
 
 ### 5.4 Engine bridge: MCell3 ⇄ MCell4 — *in-process converter*  → doc 04
-- `src4/mcell3_world_converter.cpp` reads the legacy `struct volume` (filled by `src/init.c` from
-  the MDL parse) and constructs an equivalent MCell4 `World`.
+- On MCell4's MDL path (`mcell -mcell4`), `src4/mcell3_world_converter.cpp` reads the legacy
+  `struct volume` (filled by MCell3's parser and MCell3's initialization, `src/init.c`) and
+  constructs an equivalent MCell4 `World`. Between the two, MCell4 checks every wall's vertex
+  indices (doc 04 §6.2).
 - `src4/mcell4_iface_for_mcell3.{h,cpp}` is the C-callable shim letting the legacy C `main`
   (`src/mcell.c`) invoke the C++ engine.
 

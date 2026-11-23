@@ -50,14 +50,18 @@ nanobind — migrated from pybind11, doc 06). Both converge on the **MCell4** C+
 Entry point: **`mcell_codebase_wiki/00_overview.md`** (architecture, build graph, integration map,
 reading guide). Then `01_libbng.md`, `02_nfsim.md`, `03_nfsimCInterface.md`,
 `04_mcell_core_and_dependencies.md` (engines + main loop + geometry analysis),
-`05_mcell_python_api_and_build.md` (YAML→nanobind codegen + build + static-Py/uv); `06` and
-`07_vtk_removal.md` record the nanobind migration and the VTK removal. Every doc
+`05_mcell_python_api_and_build.md` (YAML→nanobind codegen + build + static-Py/uv); `06`,
+`07_vtk_removal.md` and `08_vertex_index.md` record the nanobind migration, the VTK removal and the
+vertex-index project. Every doc
 carries `file_path:line` citations. **Prefer reading the relevant wiki doc before re-deriving
 structure from source.**
 
 Key facts worth holding (details + citations in the wiki):
 - **Two engines:** `mcell/src/` = MCell3 (C-as-C++, MDL); `mcell/src4/` = MCell4 (C++17, the real
-  engine). MDL runs go `parse → struct volume → src4/mcell3_world_converter → World`.
+  engine). An MDL file takes one of two paths. MCell4's MDL path (`mcell -mcell4`) goes
+  `MCell3's parser → struct volume → MCell4's check of the vertex indices → MCell3's initialization
+  → src4/mcell3_world_converter → World`. MCell3's engine (`mcell file.mdl`) runs MCell3's parser
+  and initialization and then its own simulation.
 - **NFsim is MCell3-only.** `src4` never calls it; network-free MCell4 chemistry is libbng's job.
   MCell reaches NFsim only through the `extern "C"` wrapper `nfsimCInterface` (`NFsimC::NFsimC`).
 - **The Python API is code-generated, manually:** `mcell/libmcell/definition/*.yaml` + `gen.py` →

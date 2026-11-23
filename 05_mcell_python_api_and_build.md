@@ -598,8 +598,8 @@ Two families of Python tooling are copied into the build tree (not generated):
   checks (doc 04 §6.11), plotting/visualization helpers). `bng2/`
   (BioNetGen) is copied to `<build>/bng2/` (`mcell/CMakeLists.txt:495`).
   - **The generated `model.py` guards its run block.** `MCell4Generator::generate_model`
-    (`mcell/utils/data_model_to_pymcell/mcell4_generator.cpp:1245`) wraps the
-    "initialization and execution" section in `if __name__ != '__mp_main__':` (`:1341`).
+    (`mcell/utils/data_model_to_pymcell/mcell4_generator.cpp:1288`) wraps the
+    "initialization and execution" section in `if __name__ != '__mp_main__':` (`:1384`).
     That section is the `custom_init_and_run` hook, or `initialize()` → checkpoint
     scheduling → `run_iterations()` → `end_simulation()`. The guard exists so that
     `customization.py` can couple MCell to an external simulator (e.g. NEURON) through
@@ -614,7 +614,7 @@ Two families of Python tooling are copied into the build tree (not generated):
     next run resumes from it and finishes. Tested on both branches (2026-10-15, and again
     after the fix below).
   - **The checkpoint-resume code is guarded the same way.** It is emitted above the run block
-    (`mcell4_generator.cpp:1295`, text from `get_resume_from_checkpoint_code()`,
+    (`mcell4_generator.cpp:1338`, text from `get_resume_from_checkpoint_code()`,
     `mcell/libmcell/api/python_export_constants.cpp:53`). Until it was guarded, a `spawn`
     worker started after a checkpoint was written found that checkpoint and resumed the
     simulation from it instead of doing its task. Fixed in `a972bce4` on `mcell4_dev`,

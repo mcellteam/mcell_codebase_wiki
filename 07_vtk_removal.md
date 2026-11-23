@@ -262,7 +262,7 @@ showed both.
   ULP off, e.g. `VOLUME_L4 0.12499999999999999` instead of `0.125`. Fixed in `cd6cc248` by
   compiling the file without contraction, which completes the removal's platform-independent
   volumes.
-- **`len3_squared` (`src4/defines.h:677`, 2019), through `distance3` at `src4/grid_utils.inl:993`.**
+- **`len3_squared` (`src4/defines.h:677`, 2019), through `distance3` at `src4/grid_utils.inl:991`.**
   The tile-neighbor search across a shared edge places tiles from the edge's length and compares the
   positions exactly, so one bit changes which tiles are searched for a reaction partner. Tests
   `data_model/2800` and `data_model_pymcell4/0820` failed on Apple silicon. This is a separate fix,

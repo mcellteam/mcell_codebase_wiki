@@ -259,7 +259,7 @@ about not turning bundled static libs like nauty/libbng into shared objects).
   specific headers (`bng/species.h`, `bng/rxn_container.h`, `bng/cplx.h`,
   `bng/shared_defines.h`).
 
-- **The one subclass:** `src4/simulation_config.h:28`
+- **The one subclass:** `src4/simulation_config.h:29`
   `class SimulationConfig : public BNG::BNGConfig` — MCell extends `BNGConfig`
   with partitioning, RNG, cleanup-periodicity and memory-limit settings. This is
   the sole inheritance from a BNG class.

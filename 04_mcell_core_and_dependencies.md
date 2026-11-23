@@ -47,12 +47,13 @@ The bridge between the two lives in `src4/`:
 
 | File | Role |
 |---|---|
-| `src4/mcell3_world_converter.h/.cpp` | `class MCell3WorldConverter` — reads the MCell3 `volume` struct and builds an equivalent MCell4 `World` object graph (`mcell3_world_converter.h:37`). |
+| `src4/mcell3_world_converter.h/.cpp` | `class MCell3WorldConverter` — reads the MCell3 `volume` struct and builds an equivalent MCell4 `World` object graph (`mcell3_world_converter.h:39`). |
 | `src4/mcell4_iface_for_mcell3.h/.cpp` | Thin **C-callable shim** so the legacy C code in `src/mcell.c` can hand off to the C++ MCell4 engine. Holds the single global converter `g_converter` (`mcell4_iface_for_mcell3.cpp:17`). The header only includes `mcell_structs_shared.h` so it is includable from C. |
 
-`mcell4_iface_for_mcell3.h` exposes four functions (`mcell4_iface_for_mcell3.h:17-20`):
+`mcell4_iface_for_mcell3.h` exposes five functions (`mcell4_iface_for_mcell3.h:20-24`):
 
 ```c
+void mcell4_check_vertex_indices(struct volume* s);                  // before MCell3's initialization (§6.2)
 bool mcell4_convert_mcell3_volume(struct volume* s);                 // volume -> World
 bool mcell4_run_simulation(bool dump_initial_state, bool dump_with_geometry=false);
 void mcell4_convert_to_data_model(bool only_for_viz);                // World -> data_model.json
@@ -61,35 +62,46 @@ void mcell4_delete_world();
 
 ### 1.2 The MCell3WorldConverter pipeline
 
-`MCell3WorldConverter::convert(volume* s)` (`mcell3_world_converter.cpp:102`) runs an
+MCell4's MDL path is an MDL file run with `mcell -mcell4` (also `-mdl2datamodel4`). On it,
+`main` (`src/mcell.c`) runs MCell3's parser (`:68`); then MCell4's check of every wall's vertex
+indices (`mcell4_check_vertex_indices`, `:73-75`, which calls
+`MCell3WorldConverter::check_vertex_indices_before_mcell3_init`, `mcell3_world_converter.cpp:528`;
+§6.2); then MCell3's initialization (`src/mcell.c:83`); and then the converter (`:99`). MCell3's
+engine (an MDL file run without `-mcell4`) runs the parser and the initialization, and none of
+MCell4's code.
+
+`MCell3WorldConverter::convert(volume* s)` (`mcell3_world_converter.cpp:103`) runs an
 ordered pipeline that reads MCell3 structs and creates MCell4 objects:
 
 | Step | Method | What it creates or checks |
 |---|---|---|
-| 0 | the `DYNAMIC_GEOMETRY` stop (`:107-111`) | stops when MCell3's parser scheduled dynamic geometry, which MCell4 doesn't support (§6.6) |
-| 1 | `convert_simulation_setup` (`:212`) | fills `SimulationConfig` (units, RNG seed, partition bounds) |
-| 2 | `convert_species` (`:873`) | BNG species via `World::get_all_species()` |
-| 3 | `create_initial_surface_region_release_event` (`:118`) | initial surface molecule release |
-| 4 | `convert_rxns` (`:1302`) | BNG reaction rules; it collects the clamps (`add_clamp`, `:1082`) |
-| 5 | `add_partition` (`:125`) | the single initial `Partition` (`PARTITION_ID_INITIAL`) |
-| 6 | `convert_geometry_objects` (`:493`) | first the mesh checks of every object (`check_polygonal_objects`, §6.2); then `GeometryObject`, `Wall`, `Region`, linked from each object's `MeshTable` (§6.4) |
-| 7 | `convert_release_events` (`:1408`) | `ReleaseEvent`s, with their walls, areas and boxes computed by MCell4 (§6.6) |
-| 8 | `convert_viz_output_events` (`:1597`) | `VizOutputEvent` |
-| 9 | `convert_mol_or_rxn_count_events` (`:1807`) | `MolOrRxnCountEvent` |
-| 10 | `create_clamp_events` (`:1987`) | the `ClampReleaseEvent`s, built by the function the Python API's converter uses too (§6.6) |
-| 11 | `MeshUtils::check_usage` (`:142-145`) | the usage errors (§6.3) |
+| 0 | the `DYNAMIC_GEOMETRY` stop (`:108-112`) | stops when MCell3's parser scheduled dynamic geometry, which MCell4 doesn't support (§6.6) |
+| 1 | `convert_simulation_setup` (`:213`) | fills `SimulationConfig` (units, RNG seed, partition bounds) |
+| 2 | `convert_species` (`:941`) | BNG species via `World::get_all_species()` |
+| 3 | `create_initial_surface_region_release_event` (`:119`) | initial surface molecule release |
+| 4 | `convert_rxns` (`:1370`) | BNG reaction rules; it collects the clamps (`add_clamp`, `:1150`) |
+| 5 | `add_partition` (`:126`) | the single initial `Partition` (`PARTITION_ID_INITIAL`) |
+| 6 | `convert_geometry_objects` (`:561`) | first the mesh checks of every object (`check_polygonal_objects`, §6.2); then `GeometryObject`, `Wall`, `Region`, linked from each object's `MeshTable` (§6.4) |
+| 7 | `convert_release_events` (`:1476`) | `ReleaseEvent`s, with their walls, areas and boxes computed by MCell4 (§6.6) |
+| 8 | `convert_viz_output_events` (`:1665`) | `VizOutputEvent` |
+| 9 | `convert_mol_or_rxn_count_events` (`:1875`) | `MolOrRxnCountEvent` |
+| 10 | `create_clamp_events` (`:2055`) | the `ClampReleaseEvent`s, built by the function the Python API's converter uses too (§6.6) |
+| 11 | `MeshUtils::check_usage` (`:143-146`) | the usage errors (§6.3) |
 
 **What MCell4 takes from MCell3.**
-- **From MCell3's parser:** MCell3's parser and initialization run before the converter
-  (`src/mcell.c:68`, `:77`; §8.1). The converter reads the parsed model: each object's walls as
-  parsed, with one MCell4 vertex per MCell3 vertex, and the regions, reactions, releases and counts.
+- **From MCell3's parser:** on MCell4's MDL path, MCell3's parser and initialization run before the
+  converter (`src/mcell.c:68`, `:83`; §8.1). The converter reads the parsed model: each object's
+  walls as parsed, with one MCell4 vertex per MCell3 vertex, and the regions, reactions, releases
+  and counts.
 - **Computed by MCell4,** as for Python API models (§6): the mesh checks, the wall constants and
   links, the region borders, the walls, areas and boxes of releases, and the walls of clamps.
 - **Still from MCell3's initialization:** the partition's placement and the random-number state
   (§6.12).
-- **Where MCell3's parser or initialization stops a model,** MCell4 never sees it (§6.2).
+- **Where MCell3's parser or initialization stops a model** on MCell4's MDL path, MCell4 never sees
+  it (§6.2). MCell4's check of the vertex indices runs before MCell3's initialization, which
+  would read the vertices through them.
 
-The converter keeps **ID-mapping tables** (`mcell3_world_converter.h:96-148`) — MCell3
+The converter keeps **ID-mapping tables** (`mcell3_world_converter.h:106-158`) — MCell3
 species-id ↔ MCell4 species-id, `vector3*` ↔ partition vertex index, `wall*` ↔ wall
 index, `region*` ↔ region index — so cross-references between the two object models
 stay consistent during translation.
@@ -105,7 +117,7 @@ stay consistent during translation.
   the pure MCell4 path: the Python API builds an MCell4 `World` directly via
   `libmcell`, with **no** MCell3/MDL involved.
 - Both link the common static engine library **`mcell4`**
-  (`add_library(${PROJECT_NAME} STATIC ...)`, `src4/CMakeLists.txt:116-119`, aliased
+  (`add_library(${PROJECT_NAME} STATIC ...)`, `src4/CMakeLists.txt:118-121`, aliased
   `MCell::mcell4`).
 
 ---
@@ -202,19 +214,19 @@ src/
 | `bng_engine` | `BNG::BNGEngine` | **owns all species + reactions** (delegated to libbng, `world.h:243`) |
 | `stats` | `SimulationStats` | iteration counter + counters (`world.h:245`) |
 | `scheduler` | `Scheduler` | time-ordered event calendar (`world.h:250`) |
-| `partitions` | `PartitionVector` | spatial partitions (`world.h:263`) |
-| `count_buffers` | `CountBufferVector` | buffered observable output (`world.h:265`) |
+| `partitions` | `PartitionVector` | spatial partitions (`world.h:259`) |
+| `count_buffers` | `CountBufferVector` | buffered observable output (`world.h:261`) |
 | `rng` | `rng_state` | single RNG state for the whole simulation (`world.h:256`) |
 | `callbacks` | `API::Callbacks&` | Python callback hooks (`world.h:248`) |
 
 Two run entry points:
 
-- **MDL mode:** `init_and_run_simulation()` (`world.cpp:624`) → `init_simulation()` then
-  `run_n_iterations(total_iterations, true)` (`world.cpp:628-634`). Called by the
+- **MDL mode:** `init_and_run_simulation()` (`world.cpp:623`) → `init_simulation()` then
+  `run_n_iterations(total_iterations, true)` (`world.cpp:627-633`). Called by the
   executable via `mcell4_run_simulation`.
 - **Python mode:** `init_simulation(start_time)` (`world.cpp:242`) is called once, then
-  `run_n_iterations(num_iterations, ...)` (`world.cpp:380`) may be called repeatedly,
-  finally `end_simulation()` (`world.cpp` ~`:583`).
+  `run_n_iterations(num_iterations, ...)` (`world.cpp:379`) may be called repeatedly,
+  finally `end_simulation()` (`world.cpp` ~`:582`).
 
 ### 3.2 `Partition` — spatial subdivision
 
@@ -222,7 +234,7 @@ Two run entry points:
 divided into one or more **partitions** (an axis-aligned lattice; in MDL mode there is
 typically a single initial partition `PARTITION_ID_INITIAL`). Each partition is further
 divided into a 3D grid of **subparts** (subpartitions): `num_subparts ==
-num_subparts_per_partition_edge^3` (`simulation_config.h:69-71`).
+num_subparts_per_partition_edge^3` (`simulation_config.h:70-72`).
 
 Subparts are the spatial-hashing unit used to find reaction partners cheaply:
 
@@ -307,27 +319,27 @@ The concrete event classes:
 - **Geometry** (`geometry.h`): `GeometryObject` (a mesh), `Wall` (a triangle),
   `Region` (a named subset of walls), `Edge`, `Grid` (surface tessellation). Region set
   logic is expressed by `RegionExpr` (`region_expr.h`).
-- **`SimulationConfig`** (`simulation_config.h:28`) — `class SimulationConfig : public
+- **`SimulationConfig`** (`simulation_config.h:29`) — `class SimulationConfig : public
   BNG::BNGConfig`. It *inherits* libbng's configuration and adds MCell-specific spatial
   parameters: partition/subpart geometry, radial diffusion-step lookup tables
-  (`radial_2d_step`/`radial_3d_step`, `simulation_config.h:76-77`), cleanup
-  periodicities, memory limit, etc. `init()` (`simulation_config.h:109`) chains to
+  (`radial_2d_step`/`radial_3d_step`, `simulation_config.h:77-78`), cleanup
+  periodicities, memory limit, etc. `init()` (`simulation_config.h:110`) chains to
   `BNGConfig::init()` then builds the subpart edge length and radial step tables.
 
 ### 3.5 The simulation main loop
 
-`World::run_n_iterations()` (`world.cpp:380`) is the loop:
+`World::run_n_iterations()` (`world.cpp:379`) is the loop:
 
 ```
 do {
-  check_checkpointing_signal();                       // world.cpp:407
-  double time = scheduler.get_next_event_time();      // world.cpp:421
-  current_iteration = time_to_iteration(time);        // world.cpp:424
+  check_checkpointing_signal();                       // world.cpp:406
+  double time = scheduler.get_next_event_time();      // world.cpp:420
+  current_iteration = time_to_iteration(time);        // world.cpp:423
   if (current_iteration >= first + num_iterations) break;
   ... periodic count-buffer flush / progress report ...
-  EventExecutionInfo info = scheduler.handle_next_event();  // world.cpp:457  <-- runs one event
+  EventExecutionInfo info = scheduler.handle_next_event();  // world.cpp:456  <-- runs one event
   ... report progress ...
-  if (terminate && info.type_index == SIMULATION_END_CHECK) break;  // world.cpp:491
+  if (terminate && info.type_index == SIMULATION_END_CHECK) break;  // world.cpp:490
 } while (true);
 ```
 
@@ -458,31 +470,31 @@ integration boundary is clean: `World` owns one `BNG::BNGEngine`, and
 | MCell-side construct | libbng type | Where |
 |---|---|---|
 | `World::bng_engine` | `BNG::BNGEngine` | `world.h:243` |
-| `SimulationConfig` | `: public BNG::BNGConfig` | `simulation_config.h:28` |
+| `SimulationConfig` | `: public BNG::BNGConfig` | `simulation_config.h:29` |
 | `World::get_all_species()` | `BNG::SpeciesContainer&` | `world.h:168` → `bng_engine.get_all_species()` |
 | `World::get_all_rxns()` | `BNG::RxnContainer&` | `world.h:171` → `bng_engine.get_all_rxns()` |
-| BNGL/compartment data | `bng_engine.get_data()` → `BNG::BNGData` | `partition.cpp:889` |
+| BNGL/compartment data | `bng_engine.get_data()` → `BNG::BNGData` | `partition.cpp:896` |
 
 The call surface MCell4 actually uses:
 
 - **`SpeciesContainer`** — `get_all_species().get(species_id)` returns a `BNG::Species`
-  (`world.cpp:706`); `.get_count()` (`world.cpp:263`) and `.dump()` (`world.cpp:657`).
+  (`world.cpp:705`); `.get_count()` (`world.cpp:263`) and `.dump()` (`world.cpp:656`).
   Used everywhere the engine needs a species' diffusion constant, mass, flags, etc.
 - **`RxnContainer`** — `get_all_rxns().get(rxn_rule_id)` returns a `BNG::RxnRule`
-  (`world.cpp:688`); `.dump()` (`world.cpp:658`). The reaction-utility `.inl`
+  (`world.cpp:687`); `.dump()` (`world.cpp:657`). The reaction-utility `.inl`
   (`rxn_utils.inl`) consults BNG rxn classes during diffusion to decide outcomes.
 - **`BNGData`** — `bng_engine.get_data().get_compartment(id)` returns a
-  `BNG::Compartment` (`partition.cpp:889,895`), used for compartment hierarchy /
-  region containment. `.dump()` (`world.cpp:656`).
+  `BNG::Compartment` (`partition.cpp:896,902`), used for compartment hierarchy /
+  region containment. `.dump()` (`world.cpp:655`).
 - **`BNGConfig`** — `SimulationConfig::init()` calls `BNGConfig::init()`
-  (`simulation_config.h:110`); final warnings via
-  `bng_engine.get_config().print_final_warnings()` (`world.cpp:610`).
+  (`simulation_config.h:111`); final warnings via
+  `bng_engine.get_config().print_final_warnings()` (`world.cpp:609`).
 - **BNGL parsing** (`parse_bngl_file`) and BNGL export (`bngl_exporter.cpp`,
   `bng_data_to_datamodel_converter.cpp`) are driven from MCell through the BNG engine
   on the Python/BNGL path.
 
 The MCell3 converter also funnels through BNG: `convert_species`/`convert_rxns`
-(`mcell3_world_converter.cpp:826/1257`) create the BNG species and rxn rules from the
+(`mcell3_world_converter.cpp:941/1370`) create the BNG species and rxn rules from the
 legacy `volume` data, so by the time MCell4 runs, *all* chemistry lives in the BNG
 engine regardless of whether the model came from MDL or Python.
 
@@ -499,8 +511,8 @@ This is what makes rule-based models with combinatorially huge state spaces trac
 ### 5.1 MCell4 (`src4`) does **not** use NFsim
 
 Confirmed by search: the only `nfsim` occurrences in `src4/` are (a) commented-out
-field references in the converter (`mcell3_world_converter.cpp:1092-1094`), (b) the
-nfsimCInterface include path in `src4/CMakeLists.txt:131` (carried for the shared link),
+field references in the converter (`mcell3_world_converter.cpp:1205-1207`), (b) the
+nfsimCInterface include path in `src4/CMakeLists.txt:133` (carried for the shared link),
 and (c) a `nfsim_export` *naming* flag in the BNGL exporter (`bngl_exporter.cpp:43`) that
 only affects how rates are *labeled* when exporting BNGL for an external NF run. The
 MCell4 engine itself performs no NFsim queries. Network-free behavior in MCell4 is
@@ -533,7 +545,7 @@ documented in `02_nfsim.md` / `03_nfsimCInterface.md`.
 
 > This section stands alone as MCell's geometry reference: how MCell4 checks the mesh of each
 > geometry object, links its walls, keeps what it learned for the run, and uses it. It describes
-> the code at `mcell` `e62b9af8`; the line citations are to that commit.
+> the code at `mcell` `1bb0f809`; the line citations are to that commit.
 >
 > - **The VTK removal** (doc 07) replaced VTK with the in-tree geometry analysis of §6.7.
 > - **The vertex-index project** (doc 08; branch `mcell4_nanobind_vertexidx`) made the file's
@@ -542,7 +554,12 @@ documented in `02_nfsim.md` / `03_nfsimCInterface.md`.
 >     coordinates.
 >   - It never repairs a mesh: nothing is merged, reordered or reoriented. It only reports:
 >     errors stop the run, warnings don't.
->   - MCell3's engine and its code are unchanged.
+>   - MCell3's engine is unchanged, and so is MCell3's code, but for one call that MCell4's MDL
+>     path makes in `src/mcell.c` (§1.2).
+>
+> An MDL file takes one of two paths: **MCell3's engine** (`mcell file.mdl`) or **MCell4's MDL
+> path** (`mcell -mcell4 file.mdl`, also `-mdl2datamodel4`). Both run MCell3's parser and MCell3's
+> initialization; on MCell4's MDL path `MCell3WorldConverter` then builds MCell4's model.
 
 ### 6.1 Where the code is
 
@@ -564,7 +581,8 @@ The engine code that uses them:
   - `Geometry::update_moved_walls` applies vertex moves.
 - **The converters**, which run the checks and stop the run:
   - `MCell4Converter` for Python API models (`libmcell/api/mcell4_converter.cpp`);
-  - `MCell3WorldConverter` for MDL files run with `mcell -mcell4` (`src4/mcell3_world_converter.cpp`).
+  - `MCell3WorldConverter` for MCell4's MDL path (`src4/mcell3_world_converter.cpp`), with its
+    check of the vertex indices before MCell3's initialization (§6.2).
 - **`src4/release_event.cpp`, `src4/clamp_release_event.{h,cpp}`:** the walls, areas and boxes of
   releases and clamps (§6.6).
 - **`libmcell/api/introspection.cpp`, `libmcell/api/model.cpp`:** the Python API's getters, its
@@ -584,7 +602,7 @@ and before anything uses the mesh.
 | Front end | Where | Input |
 |---|---|---|
 | Python API | `Model.initialize()` → `MCell4Converter::convert_before_init` (`mcell4_converter.cpp:64`) → `check_geometry_objects` (`:71`, `:889`), after `convert_simulation_setup`, which sets the seed and the length unit | `MeshUtils::check_lists` (`mesh_table.hpp:365`) on `vertex_list`, `wall_list` and the surface regions' wall indices, as they are at `initialize()`. Changes made through setters after the constructor are checked too. |
-| MDL file run with `mcell -mcell4` (also `-mdl2datamodel4`) | MCell3's parser and initialization run first (`src/mcell.c:68`, `:77`). Then `MCell3WorldConverter::convert_geometry_objects` (`mcell3_world_converter.cpp:493`) starts with `check_polygonal_objects` (`:481`, `:499`). | `MeshUtils::check_parsed_walls` (`mesh_table.hpp:375`) on the walls MCell3's parser stored (`polygon_object::element`). The converter adds one MCell4 vertex per MCell3 vertex, in order (`mcell3_world_converter.cpp:794`). |
+| MCell4's MDL path: an MDL file run with `mcell -mcell4` (also `-mdl2datamodel4`) | MCell3's parser runs first (`src/mcell.c:68`). Then MCell4 checks every wall's vertex indices (`check_vertex_indices_before_mcell3_init`, `mcell3_world_converter.cpp:528`, called at `src/mcell.c:74`; below), and MCell3's initialization runs (`:83`). Then `MCell3WorldConverter::convert_geometry_objects` (`mcell3_world_converter.cpp:561`) starts with `check_polygonal_objects` (`:482`, `:567`). | Before MCell3's initialization, pass 0 on the walls MCell3's parser stored (`polygon_object::element`). Then `MeshUtils::check_parsed_walls` (`mesh_table.hpp:375`) on the same walls; the converter adds one MCell4 vertex per MCell3 vertex, in order (`mcell3_world_converter.cpp:862`). |
 | `data_model_to_pymcell` | the volume of a BNGL compartment (§6.6) | `MeshUtils::check_mesh` (`data_model_geometry.cpp:51`) on the data model's lists |
 
 MCell3's engine (an MDL file run without `-mcell4`) runs none of these checks.
@@ -614,7 +632,7 @@ MCell3's engine (an MDL file run without `-mcell4`) runs none of these checks.
 | # | Check | Finds | Kind | If it fails |
 |---|---|---|---|---|
 | 1 | Equal coordinates (`find_equal_coordinates`, `mesh_table.cpp:545`) | groups of vertices with exactly equal coordinates (0.0 equals -0.0; NaN equals nothing), on the coordinates as the model gives them; skipped when a vertex doesn't have three coordinates | warning | nothing is skipped: connectivity comes from the indices |
-| 2 | Pass 0 (`check_indices`, `mesh_table.cpp:170`) | a wall with an index below 0 or not below the vertex count; a wall that uses one vertex twice; too many vertices or walls for 32-bit ids. `check_lists` adds vertices without three coordinates, walls without three indices, and surface-region wall indices out of range. | error | without valid indices there is no table, so 3-9 don't run. A bad region index doesn't stop them. |
+| 2 | Pass 0 (`check_indices`, `mesh_table.cpp:170`) | a wall with an index below 0 or not below the vertex count; a wall that uses one vertex twice; too many vertices or walls for 32-bit ids. `check_lists` adds vertices without three coordinates, walls without three indices, and wall indices of a surface region out of range. | error | without valid indices there is no table, so 3-9 don't run. A bad region index doesn't stop them. |
 | 3 | Zero-area walls (`find_zero_area_walls`, `is_zero_area`, `mesh_table.cpp:504`) | walls whose area is at most 1e-12 internal units squared, or NaN: the test of `Wall::initialize_wall_constants` (`src4/wall.cpp:306`) | error | nothing is skipped |
 | 4 | Orphaned vertices (`find_orphaned_vertices`, `mesh_table.cpp:535`) | vertices that no checked wall uses | error | nothing is skipped |
 | 5 | Walls with the same three vertices (`find_duplicate_walls`, `mesh_table.cpp:276`) | groups of such walls, in any order of the vertices | error | nothing is skipped |
@@ -641,34 +659,53 @@ MCell3's engine (an MDL file run without `-mcell4`) runs none of these checks.
   converter's checks take 1.7 s of CPU.
 
 **MDL `REMOVE_ELEMENTS`.** MCell3 marks the walls it removed in `polygon_object::side_removed`
-(`mcell3_world_converter.cpp:453`). That covers both the walls of `REMOVE_ELEMENTS` and the
-zero-area walls its initialization dropped; only the area tells them apart.
+(`mcell3_world_converter.cpp:454`): its parser the walls of `REMOVE_ELEMENTS`, its initialization
+the zero-area walls it dropped; only the area tells them apart.
 - `check_parsed_walls` (`mesh_table.cpp:752`) checks a removed wall with zero area, so that it is
-  reported. It leaves out the others as `REMOVE_ELEMENTS` walls.
+  reported, and a removed wall with a vertex index out of range, which pass 0 reports (`:772`). It
+  leaves out the others as `REMOVE_ELEMENTS` walls. On MCell4's MDL path the check before MCell3's
+  initialization already stops a file with such an index (below).
 - The report keeps the file's wall ids and adds the line `Removed by REMOVE_ELEMENTS: 1 (wall 0)`.
   A vertex that only removed walls use is orphaned (check 4).
 - MCell4 simulates only the kept walls. The converter checks that table wall `j` is the file's
-  wall `file_wall_ids[j]` (`mcell3_world_converter.cpp:830`).
+  wall `file_wall_ids[j]` (`mcell3_world_converter.cpp:898`).
 - Accepted cost: a wall that the file removes and that also has zero area stops the run as a
   zero-area wall. MCell3's engine never measures such walls.
 
-**MDL files: what MCell3's parser and initialization stop first.** They run before the converter,
-so where they stop, the user sees MCell3's message and gets no geometry report.
-- **Pass 0 for MDL files run on MCell4:**
-  - MCell3's parser refuses vertices without three coordinates, walls without three indices and
-    region indices out of range.
-  - MCell3's initialization stops on an index above the vertex count (`src/init.c:2092-2095`).
-  - A wall that uses one vertex twice is the only pass-0 case that reaches MCell4. MCell3 drops it
-    as degenerate ("Degenerate polygon found and automatically removed"), and MCell4 reports it.
-  - An index equal to the vertex count, or negative, crashes both engines (§6.12).
-- **Uses of volume molecules:** MCell3's initialization links walls by coordinates and stops
-  counted objects and release regions that it finds non-watertight by its own rules:
+**MDL files on MCell4's MDL path: what runs before the converter.** MCell3's parser, MCell4's
+check of the vertex indices, then MCell3's initialization. Where MCell3's parser or
+initialization stops a file, the user sees MCell3's message and gets no geometry report.
+- **Pass 0:**
+  - MCell3's parser refuses vertices without three coordinates, walls without three indices, and
+    wall indices of a surface region or of `REMOVE_ELEMENTS` out of range. A negative one too: it
+    reads them as unsigned, so its message shows -1 as 4294967295 ("Region element specifier ...
+    refers to sides 4294967295...4294967295").
+  - **MCell4's check before MCell3's initialization** (`check_vertex_indices_before_mcell3_init`,
+    `mcell3_world_converter.cpp:528`) runs pass 0 on every wall of every instantiated polygonal
+    object as the parser stored it, also on the walls that `REMOVE_ELEMENTS` removes, with the
+    file's ids. MCell3's initialization would read each wall's vertices through its indices
+    (`src/init.c:2098`).
+    - If an index is below 0 or not below the object's vertex count
+      (`mcell3_world_converter.cpp:537-539`), it writes the geometry report with a block for each
+      object with an index problem (a wall that uses a vertex twice included), prints their
+      `MESH_INVALID_INDICES` lines and stops once (`:557`). The other objects get no block: the run
+      ends before their checks.
+    - Otherwise it writes nothing, and the converter checks every object.
+  - A wall that uses one vertex twice is then the only pass-0 case left for the converter.
+    MCell3's initialization drops it as degenerate ("Degenerate polygon found and automatically
+    removed"), and `check_parsed_walls` reports it.
+  - On MCell3's engine none of MCell4's checks run: MCell3's initialization stops an index above
+    the vertex count (`src/init.c:2092-2095`) and crashes on one equal to the count or below 0
+    (§6.12).
+- **Uses of volume molecules:** MCell3's initialization, which MCell4's MDL path runs too, links
+  walls by coordinates and stops counted objects and release regions that it finds
+  non-watertight by its own rules:
   - "Cannot count molecules or events inside non-manifold object region" (`src/count_util.c:1438`);
   - "Cannot release a 3D molecule inside the unclosed region" (`src/init.c:3599`, `:3629`).
 
-  So a counted object or release region reaches MCell4's usage errors only when MCell3 finds it
-  watertight: for example a cube whose faces each have their own four vertices, watertight by its
-  coordinates and non-watertight by its vertex indices.
+  So on MCell4's MDL path a counted object or release region reaches MCell4's usage errors only
+  when MCell3's initialization finds it watertight: for example a cube whose faces each have their
+  own four vertices, watertight by its coordinates and non-watertight by its vertex indices.
 
 ### 6.3 The geometry report, the terminal lines and the one stop
 
@@ -677,13 +714,14 @@ so where they stop, the user sees MCell3's message and gets no geometry report.
 - **Header:** `Geometry report, <date>`, written by `BNG::initialize_report_file`
   (`libbng/bng/bng_config.cpp:134`), as for MCell's other reports.
 - **Blocks:** it is always written, with one block per object in the order the converter checks
-  them (`write_report_block`, `mesh_table.cpp:788`).
+  them (`write_report_block`, `mesh_table.cpp:789`).
 - **Ids:** every list of ids gives its count and says what the ids are. Walls have the file's ids
   (`REMOVE_ELEMENTS`).
 - **Units and the usage errors:** areas are in um^2 and volumes in um^3; coordinates are written
   as given. The usage errors (below) add nothing to the report.
 
-The stored report of `nutmeg4_mdl/0240_mesh_errors_error`, an MDL file with one object per error:
+The stored report of `nutmeg4_mdl/0240_mesh_errors_error`, an MDL file with one object per error,
+on MCell4's MDL path:
 
 ```
 Geometry report, 2026-11-20 13:52:53
@@ -751,9 +789,9 @@ The other report lines are `Removed by REMOVE_ELEMENTS: ...`, `Orphaned vertices
 ...`, `Too many vertices or walls to check`, `Vertices that don't have three coordinates: ...`,
 `Walls that don't have three vertex indices: ...`, `Walls with a vertex index out of range: ...` and
 `Surface regions with a wall index out of range: ...` with one line per region
-(`mesh_table.cpp:800-852`). `mcell_tests/tests/utils_tests/mesh_utils/reports/` has a block for each.
+(`mesh_table.cpp:801-853`). `mcell_tests/tests/utils_tests/mesh_utils/reports/` has a block for each.
 
-**The terminal lines** (`problem_lines`, `mesh_table.cpp:946`; `format_problem_line`, `:1027`):
+**The terminal lines** (`problem_lines`, `mesh_table.cpp:947`; `format_problem_line`, `:1028`):
 - **Format:** one line per object and problem, printed through `mcell_error_raw` to MCell's error
   stream. Every error line comes first: the objects in report order, each object's problems in the
   block's order. Then every warning (`GeometryReport::finish`, `mesh_utils.cpp:83-95`).
@@ -776,20 +814,22 @@ Error: 6 geometry objects have errors: Scene.repeated, Scene.duplicate, Scene.ze
 ```
 
 **The one stop.** Once every object is checked, a model with errors stops once, naming every
-object with errors (`stop_message`, `mesh_table.cpp:1046`). Warnings don't stop the run.
+object with errors (`stop_message`, `mesh_table.cpp:1047`). Warnings don't stop the run.
 - **Python API:** a `ValueError` with that text (`mcell4_converter.cpp:918`).
-- **MDL files on MCell4, and `-mdl2datamodel4`:** `mcell_error` prints `Error: ...` and the run
-  ends with exit code 1 (`mcell3_world_converter.cpp:488`). `-mdl2datamodel4` then writes no data
+- **MCell4's MDL path, also `-mdl2datamodel4`:** `mcell_error` prints `Error: ...` and the run
+  ends with exit code 1 (`mcell3_world_converter.cpp:489`). `-mdl2datamodel4` then writes no data
   model.
+- **The check of the vertex indices before MCell3's initialization** (§6.2) stops the same way
+  (`:557`), with the same lines and stop. Its report holds only the objects with an index problem.
 
 **The usage errors** concern volume molecules only. Surface molecules are released onto walls and
 counted on walls, which needs no inside.
 - **When:** once the releases and counts are converted, `MeshUtils::check_usage`
   (`mesh_utils.cpp:248`) checks how the model uses each object. It runs at the end of both
-  converters (`mcell4_converter.cpp:118`, `mcell3_world_converter.cpp:142`).
+  converters (`mcell4_converter.cpp:118`, `mcell3_world_converter.cpp:143`).
 - **Format:** each use gives one line, `Error: [CODE] <object>: <use>, but <problem>; see <report>`,
   where `<report>` is the report's path. After every line comes one stop:
-  `2 geometry objects have usage errors: ...` (`usage_stop_message`, `mesh_table.cpp:1050`), as a
+  `2 geometry objects have usage errors: ...` (`usage_stop_message`, `mesh_table.cpp:1051`), as a
   `ValueError` or with exit code 1. The objects come in the partition's order; for each, its counts,
   its compartment, then its releases in the scheduler's order.
 - **The two codes:**
@@ -826,7 +866,7 @@ Error: 2 geometry objects have usage errors: Scene.inside_out, Scene.unshared; s
 ### 6.4 Wall links and region borders
 
 **Wall links.** Both converters call `GeometryObject::link_walls(p, table)` (`geometry.cpp:60`)
-once an object's walls exist (`mcell4_converter.cpp:968`, `mcell3_world_converter.cpp:836`).
+once an object's walls exist (`mcell4_converter.cpp:968`, `mcell3_world_converter.cpp:904`).
 - **An edge with two walls** links the wall of its first entry, the forward wall, with the wall of
   its second entry, the backward wall:
   - each wall's `nb_walls` names the other;
@@ -842,7 +882,7 @@ once an object's walls exist (`mcell4_converter.cpp:968`, `mcell3_world_converte
 - **Wall order:** an object's walls are created one after another, so table wall `j` is
   `wall_indices[j]` (`geometry.cpp:63`).
 - **Wall constants:** MCell4 computes every wall's constants with
-  `Wall::initialize_wall_constants`, for MDL files too (`mcell3_world_converter.cpp:594`).
+  `Wall::initialize_wall_constants`, on MCell4's MDL path too (`mcell3_world_converter.cpp:662`).
 
 **Region borders.** `Region::init_border_edges(obj, table)` (`geometry.cpp:589`) applies one rule
 to every region, `ALL` included, for both converters.
@@ -878,7 +918,7 @@ it hits a wall.
   wall `j` is `wall_indices[j]`.
 - **When it's set:** the converters set it with `set_mesh_check` (`geometry.cpp:116`) once the
   walls are linked and the regions have their borders (`mcell4_converter.cpp:1028`,
-  `mcell3_world_converter.cpp:842`).
+  `mcell3_world_converter.cpp:910`).
 - **Index facts never change** during a run, since vertex moves change only coordinates: the table,
   the flags `manifold()`, `consistently_oriented()` and `watertight()` (`mesh_table.hpp:335-343`),
   the boundary edges and the shells.
@@ -957,8 +997,8 @@ MCell4 computes itself. The run peaks at 10.46 GB, against 10.33 GB before the p
      meshes in the internal units the simulation will use.
    - Compartments that intersect, or a compartment with several parents, raise a `RuntimeError`.
 3. **Releases into and onto regions.** Both converters compute each release's walls, areas and box
-   themselves: Python API models at `mcell4_converter.cpp:1335` and `:1460`, MDL files at
-   `mcell3_world_converter.cpp:1477` and `:1529`.
+   themselves: Python API models at `mcell4_converter.cpp:1335` and `:1460`, MCell4's MDL path at
+   `mcell3_world_converter.cpp:1545` and `:1597`.
    - **Volume molecules** released into a region are placed by parity, with the inside test of each
      object (`collision_utils.inl:1484`), within the box of the region expression.
      - By concentration into one object, the number comes from the object's signed volume
@@ -980,12 +1020,12 @@ MCell4 computes itself. The run peaks at 10.46 GB, against 10.33 GB before the p
        (`geometry.cpp:1011-1016`, `Region::set_coordinates_changed`, `geometry.h:374`), and
        rebuild them at their next use.
      - A release at time k·dt runs in iteration k+1, after a vertex move applied after iteration k.
-   - **MDL files on MCell4** take the whole object for a region other than `ALL` in a release of
+   - **MCell4's MDL path** takes the whole object for a region other than `ALL` in a release of
      volume molecules (§6.12).
 4. **Clamps** (volume molecules). One function builds the clamp events for both converters:
    `create_clamp_release_events` (`clamp_release_event.cpp:268`; contract at
-   `clamp_release_event.h:85-98`), called at `mcell4_converter.cpp:839` and
-   `mcell3_world_converter.cpp:1988`.
+   `clamp_release_event.h:86-98`), called at `mcell4_converter.cpp:839` and
+   `mcell3_world_converter.cpp:2056`.
    - **The events:** one per clamp (surface class, volume molecule, side), over every wall that
      carries the class through one of its regions. Each wall is used once, in wall order.
    - **Their order:** by class name, then molecule name, then side, whatever order the converter
@@ -1037,8 +1077,8 @@ MCell4 computes itself. The run peaks at 10.46 GB, against 10.33 GB before the p
    - **A failed write** prints "Could not write geometry to <prefix>.obj and <prefix>.mtl.", and the
      run continues (`:381`).
 9. **Vertex moves exist only in Python API models** (`Model.add_vertex_move`).
-   - **MDL files:** `MCell3WorldConverter` stops an MDL file with `DYNAMIC_GEOMETRY`, also for
-     `-mdl2datamodel4` (`mcell3_world_converter.cpp:107-111`). The text: "MCell4 doesn't support
+   - **MCell4's MDL path:** `MCell3WorldConverter` stops an MDL file with `DYNAMIC_GEOMETRY`, also for
+     `-mdl2datamodel4` (`mcell3_world_converter.cpp:108-112`). The text: "MCell4 doesn't support
      DYNAMIC_GEOMETRY; run this model on MCell3's engine (without -mcell4), or move vertices through
      the Python API (Model.add_vertex_move)."
    - **Wall-wall collisions of a move** are checked from the per-vertex lists (§6.5, §6.12).
@@ -1119,28 +1159,29 @@ MCell4 computes itself. The run peaks at 10.46 GB, against 10.33 GB before the p
 
 **The checks of each mesh** (§6.2, §6.3) apply to:
 - Python API models, at `initialize()`, including data model → Python;
-- MDL files run with `mcell -mcell4` or `-mdl2datamodel4`, for whatever MCell3's parser and
-  initialization let through.
+- MDL files on MCell4's MDL path (`mcell -mcell4`, `-mdl2datamodel4`): the vertex indices before
+  MCell3's initialization, the rest for whatever MCell3's parser and initialization let through
+  (§6.2).
 
 Errors stop the run once all objects are checked; warnings don't.
 
 | Code | Kind | Text (singular form) | Notes |
 |---|---|---|---|
-| `MESH_INVALID_INDICES` | error | `1 wall with a vertex index out of range`, `1 wall that uses a vertex twice`, `1 vertex that doesn't have three coordinates`, `1 wall that doesn't have three vertex indices`, `1 surface region with a wall index out of range`, joined with ", " in one line; or `too many vertices or walls to check` | MDL files: only a wall that uses a vertex twice gets this far (§6.2) |
+| `MESH_INVALID_INDICES` | error | `1 wall with a vertex index out of range`, `1 wall that uses a vertex twice`, `1 vertex that doesn't have three coordinates`, `1 wall that doesn't have three vertex indices`, `1 surface region with a wall index out of range`, joined with ", " in one line; or `too many vertices or walls to check` | MCell4's MDL path: a vertex index out of range, in any wall, stops the run before MCell3's initialization; a wall that uses a vertex twice is reported by the converter (§6.2) |
 | `MESH_ORPHANED_VERTICES` | error | `1 orphaned vertex, used by no wall` | with `REMOVE_ELEMENTS`, also a vertex that only removed walls use |
 | `MESH_DUPLICATE_WALLS` | error | `1 group of walls with the same three vertices` | |
-| `MESH_ZERO_AREA_WALLS` | error | `1 wall with zero area` | MDL files: also the walls MCell3 dropped as degenerate |
+| `MESH_ZERO_AREA_WALLS` | error | `1 wall with zero area` | MCell4's MDL path: also the walls MCell3's initialization dropped as degenerate |
 | `MESH_NOT_MANIFOLD` | error | `1 edge with 3 or more walls, 2 non-manifold vertices`; with vertices only, `1 non-manifold vertex, where groups of walls touch only at a vertex` | |
 | `MESH_INCONSISTENT_ORIENTATION` | error | `1 pair of walls runs along its shared edge in the same direction` | |
 | `MESH_DUPLICATE_VERTICES` | warning | `1 group of vertices with equal coordinates` | |
 | `MESH_NOT_WATERTIGHT` | warning | `1 boundary edge` | |
-| (the stop) | error | `2 geometry objects have errors: Scene.fin, Scene.flipped; see <report>` | `ValueError` in Python; exit code 1 for MDL files |
+| (the stop) | error | `2 geometry objects have errors: Scene.fin, Scene.flipped; see <report>` | `ValueError` in Python; exit code 1 on MCell4's MDL path |
 
 The plural forms are `2 walls with ...`, `2 pairs of walls run along their shared edge in the same
-direction`, `4 boundary edges`, and so on (`mesh_table.cpp:946-1025`).
+direction`, `4 boundary edges`, and so on (`mesh_table.cpp:947-1026`).
 
 **Usage errors** (§6.3), for volume molecules, apply to Python API models and to MDL files on
-MCell4. `Model.release_molecules` checks its own release.
+MCell4's MDL path. `Model.release_molecules` checks its own release.
 
 | Code | Text |
 |---|---|
@@ -1153,13 +1194,14 @@ MCell4. `Model.release_molecules` checks its own release.
 | Case | Message | Front end |
 |---|---|---|
 | a wall clamped twice (§6.6) | `[CLAMP_ON_WALL_TWICE] ...` | both |
-| MDL `DYNAMIC_GEOMETRY` | `Error: MCell4 doesn't support DYNAMIC_GEOMETRY; ...` (§6.6) | MDL files on MCell4, `-mdl2datamodel4` |
+| MDL `DYNAMIC_GEOMETRY` | `Error: MCell4 doesn't support DYNAMIC_GEOMETRY; ...` (§6.6) | MCell4's MDL path (`-mcell4`, `-mdl2datamodel4`) |
 | a dynamic object in a data model | `Error: geometry object Cube is dynamic, which MCell4 doesn't support; ...` | `data_model_to_pymcell` |
 | `Model.get_object_volume` of a non-watertight object | `ValueError: Geometry object <name> is non-watertight (4 boundary edges), so it has no volume; see ...` | Python API |
 | two identical counted objects | "Identical counted objects are not supported yet, error for <A> and <B>." (printed as a warning), then "Processing of counted volumes failed, terminating." | both |
 | BNGL compartments that intersect, or with several parents | `RuntimeError` (`compartment_utils.cpp:100`, `:109`, `:131`) | Python API |
 | two walls whose shared edge is extremely short | "Detected malformed geometry object" (`src4/wall.cpp:115-117`, `:178`, `:200`); also after a vertex move | both |
 | a release or count of volume molecules on a surface region | "Cannot release volume molecule onto a surface region ." / "Cannot count volume molecules or reactions on a surface region ." (`mcell4_converter.cpp:1254`, `:1257`) | Python API |
+| a vertex or wall index below 0, or not below the object's count, passed to `get_vertex`, `get_vertex_unit_normal`, `add_vertex_move`, `get_wall`, `get_wall_unit_normal`, `get_wall_color` or `set_wall_color` | `RuntimeError: Vertex index -1 is out of range for vertex_list of box.`; `RuntimeError: Wall index -1 is out of range for wall_list of box.` (`libmcell/api/geometry_object.h:79-91`) | Python API |
 
 **Other messages** (the run goes on):
 - The BNGL export: "Compartment object <name> is not watertight and its volume cannot be computed."
@@ -1167,8 +1209,8 @@ MCell4. `Model.release_molecules` checks its own release.
 - `data_model_to_pymcell`, for a BNGL compartment whose mesh it refuses: "Warning: could not compute
   volume of a geometry object: ..." (§6.6).
 - A failed OBJ write: "Could not write geometry to <prefix>.obj and <prefix>.mtl."
-- For MDL files, MCell3's own messages come first wherever its parser or initialization stops
-  (§6.2).
+- On MCell4's MDL path, MCell3's own messages come first wherever MCell3's parser or
+  initialization stops a file (§6.2).
 
 ### 6.10 Build
 
@@ -1219,7 +1261,7 @@ MCell4. `Model.release_molecules` checks its own release.
 of `mesh_table.hpp`. Its data is in `mcell_tests/tests/utils_tests/mesh_utils/` (README there).
 - **How it runs:** the set `mesh_utils` of `mcell_tests/test_configs/external.toml` runs it
   (`TesterExternal`).
-- **Size:** 137 connectivity meshes, 29 report meshes and 3,532 checks, in 0.06 s.
+- **Size:** 137 connectivity meshes, 30 report meshes and 3,534 checks, in 0.06 s.
 - **The connectivity meshes** carry the expected results of the prototype `coboundary.py`, of
   SciPy and of NumPy. They were computed once, outside the repositories; the test never runs
   Python.
@@ -1237,6 +1279,7 @@ of `mesh_table.hpp`. Its data is in `mcell_tests/tests/utils_tests/mesh_utils/` 
 |---|---|---|
 | Mesh errors and warnings: every line, the stop, the exit code, the report lines | `nutmeg4_mdl/0240_mesh_errors_error`, `0250_mesh_warnings`, `0260_mdl2datamodel4_mesh_error`; `nutmeg4_pymcell4/0780_mesh_errors_error` (with setters), `0790_mesh_warnings` | none |
 | Orphaned vertices (with `REMOVE_ELEMENTS` in the MDL test) | `nutmeg4_mdl/0230_orphaned_vertices_error`, `nutmeg4_pymcell4/0770_orphaned_vertices_error` | none |
+| Vertex indices out of range on MCell4's MDL path, stopped before MCell3's initialization, also in a wall that `REMOVE_ELEMENTS` removes | `nutmeg4_mdl/0270_vertex_index_out_of_range_error` | none |
 | Usage errors | `nutmeg4_mdl/0210_usage_errors_inside_out_and_non_watertight_error`; `nutmeg4_pymcell4/0730_usage_errors_inside_out_and_non_watertight_error`, `0740_compartment_not_watertight_error`, `0750_release_molecules_usage_error` | volume |
 | Dynamic geometry stops | `nutmeg4_mdl/0220_dynamic_geometry_error`, `nutmeg4_pymcell4/0760_data_model_dynamic_object_error` | volume |
 | A data model's broken compartment mesh, BNGL mode | `nutmeg4_pymcell4/0800_data_model_compartment_mesh_error` | volume and surface |
@@ -1249,6 +1292,7 @@ of `mesh_table.hpp`. Its data is in `mcell_tests/tests/utils_tests/mesh_utils/` 
 | Counts after a move, intersecting counted objects | `pymcell4_positive/1580_count_in_intersecting_objects_after_vertex_move` | volume |
 | Counts in intersecting objects with a parent | `pymcell4_positive/2610_count_in_intersecting_objects_w_parent` | volume |
 | The getters | `pymcell4_positive/1350_get_object_area_volume`; `1340_get_vertex` (argument errors) | none |
+| Vertex and wall indices out of range in the getters, `set_wall_color` and `add_vertex_move` | `pymcell4_positive/1360_index_argument_errors` | none |
 | OBJ export, byte for byte | `pymcell4_positive/3100_export_geometry_obj`, `3120_dyn_geom_export_geometry_obj` | none |
 | A boundary edge keeps no neighbour | `nutmeg4_pymcell4/2860_validate_volumetric_mesh` | none |
 | Errors after vertex moves (`src4/wall.cpp`) | `nutmeg4_pymcell4/1600_message_dyn_geom_obj_degenerate`, `3150_dyn_vert_wall_area_0` | none |
@@ -1265,47 +1309,50 @@ of `mesh_table.hpp`. Its data is in `mcell_tests/tests/utils_tests/mesh_utils/` 
 Issues of the engine that aren't about geometry, such as barriers and the order within an
 iteration, are in §3.7.
 
-**MDL files run on MCell4** (`MCell3WorldConverter`):
-- **A vertex index equal to the vertex count, or negative, crashes both engines.**
+**MDL files** (each item names the path: MCell3's engine, or MCell4's MDL path through
+`MCell3WorldConverter`):
+- **On MCell3's engine, a vertex index equal to the vertex count, or negative, still crashes.**
   - MCell3's initialization compares with `>` instead of `>=` and doesn't reject a negative index
     (`src/init.c:2092-2095`). `init_tri_wall` then reads past the vertex array, or `vertices[-1]`
     (`src/init.c:2098`).
-  - MCell3's initialization runs before the converter, so MCell4's pass 0 never sees either index,
-    and MCell3's code stays unchanged.
-- **A region other than `ALL` in a release of volume molecules becomes the whole object.**
-  - Where: `mcell3_world_converter.cpp:1357-1359`, `:1376-1378`.
+  - MCell3's code stays unchanged. On MCell4's MDL path, MCell4's check before MCell3's
+    initialization stops such a file with `MESH_INVALID_INDICES` (§6.2).
+- **On MCell4's MDL path, a region other than `ALL` in a release of volume molecules becomes the
+  whole object.**
+  - Where: `mcell3_world_converter.cpp:1425-1427`, `:1444-1446`.
   - Example: a release into `Scene.box[r]`, with `r` one watertight shell of a two-shell object,
     places volume molecules in both shells. MCell3's engine places them only in `r`. A release by
     concentration takes the whole object's volume.
   - A count of volume molecules inside such a region stops with a developer message
-    (`Conversion error: Expected 'ends_with(reg_name, ",ALL")' is false.`, `:1902`).
+    (`Conversion error: Expected 'ends_with(reg_name, ",ALL")' is false.`, `:1970`).
   - The Python API refuses both.
   - No suite test has either case.
   - Planned: a clear error in the converter, as the Python API gives, or support for regions made
-    of whole watertight shells for MDL files and Python API models alike.
+    of whole watertight shells on MCell4's MDL path and for Python API models alike.
 - **A spherical release by a negative concentration** (volume molecules):
   - MCell3's engine releases nothing;
-  - MCell4 stops at that release with the misleading "tries to release more than INT_MAX" message
+  - on MCell4's MDL path, MCell4 stops at that release with the misleading "tries to release more
+    than INT_MAX" message
     (`check_max_release_count`, `release_event.cpp:523`);
   - the Python API refuses such a site when it's made ("Negative release value of concentration
     may be set only when region is set.", `libmcell/api/release_site.h:101`).
 
-  Possible changes: the Python API's clear error for MDL files on MCell4 too, or removal inside the
+  Possible changes: the Python API's clear error on MCell4's MDL path too, or removal inside the
   sphere for both.
-- **Some values still come from MCell3's initialization:** the partition's placement
-  (`mcell3_world_converter.cpp:228-328`) and the random-number state (`:224`). Planned: MDL files
-  on MCell4 without MCell3's initialization (below).
+- **On MCell4's MDL path, some values still come from MCell3's initialization:** the partition's
+  placement (`mcell3_world_converter.cpp:229-329`) and the random-number state (`:225`). Planned:
+  MCell4's MDL path without MCell3's initialization (below).
 - **The two engines' region borders differ** (by design; §6.4).
   - MCell3's engine gives no borders to `ALL`, or to a region that holds every wall
     (`src/init.c:2353-2354`, `:2373-2374`). MCell4 gives them the boundary edges of a
     non-watertight mesh.
   - So an ABSORPTIVE rule for a surface molecule on such a region gives different results:
-    `mdl/2775` keeps 1000 surface molecules on MCell3's engine and 704 on MCell4.
+    `mdl/2775` keeps 1000 surface molecules on MCell3's engine and 704 on MCell4's MDL path.
 - **Conflicting surface classes on one wall** are checked only by MCell3's initialization
-  (`check_for_conflicting_surface_classes`, `src/init.c:5209`). An example is a CLAMP with a
-  TRANSPARENT, REFLECTIVE or ABSORPTIVE rule for the same molecule. So MDL files run on MCell4 get
-  MCell3's errors, and Python API models get none. Planned: MCell4's own checks for both
-  converters (a wall clamped twice already stops, §6.6).
+  (`check_for_conflicting_surface_classes`, `src/init.c:5209`), which both paths for MDL files run.
+  An example is a CLAMP with a TRANSPARENT, REFLECTIVE or ABSORPTIVE rule for the same molecule. So
+  an MDL file gets MCell3's errors on both paths, and Python API models get none. Planned: MCell4's
+  own checks for both converters (a wall clamped twice already stops, §6.6).
 
 **Geometry and its uses:**
 - **Walls that cross at an angle aren't detected.** `check_for_overlapped_walls`
@@ -1336,16 +1383,17 @@ iteration, are in §3.7.
     event without walls.
 
 **In test and benchmark models:**
-- **The full neuropil stops on MCell4.** Private `mdl/3650` (skip), benchmark B4110 and
+- **The full neuropil stops on MCell4's MDL path.** Private `mdl/3650` (skip), benchmark B4110 and
   `models/salk/neuropil_recon` share its geometry. Two objects stop it:
   - `MESH_NOT_MANIFOLD` for `d010p_sps373` (vertex 123);
   - `MESH_ORPHANED_VERTICES` for `d022` (vertex 17566).
 
   A copy repaired in both places gives, byte for byte, the outputs of MCell from before the
   project (`0652d19b`).
-- **`mdl/2810_wall_overlap_2boxes_inside_one` (todo) gives the wrong cause.** Its note blames
-  MCell3's initialization, but its object `Outer` has walls 10-18 reversed (7 inconsistent edges).
-  MCell4 stops it with `MESH_INCONSISTENT_ORIENTATION`.
+- **`mdl/2810_wall_overlap_2boxes_inside_one` (todo, skipped on MCell3's engine) gives the wrong
+  cause.** Its `todo` note blames MCell3's initialization for the converter's crash on MCell4's MDL
+  path, but its object `Outer` has walls 10-18 reversed (7 inconsistent edges). On MCell4's MDL
+  path MCell4 now stops it with `MESH_INCONSISTENT_ORIENTATION`.
 - **`d000_er` in the neuropil models** has 12 shells that face inward and lie inside no other shell
   (11 tetrahedra and one 22-wall piece).
   - The report lists them.
@@ -1354,15 +1402,15 @@ iteration, are in §3.7.
   - Its oriented surface molecules face reversed on those pieces, as on MCell3's engine.
 
 **Planned work that isn't an issue:**
-- **MDL files on MCell4 without MCell3's initialization.**
-  - Parsing and initialization are separate calls (`src/mcell.c:68`, `:77`). For `-mcell4`, the
+- **MCell4's MDL path without MCell3's initialization.**
+  - Parsing and initialization are separate calls (`src/mcell.c:68`, `:83`). For `-mcell4`, the
     parsed structures would become an `API::Model`, initialized as a Python API model is, which
     would retire `mcell3_world_converter.cpp`.
   - The cost: everything MCell3's initialization works out would have to come from parse-time
     data.
-  - Memory: an MDL file run on MCell4 keeps MCell3's model through the whole run, since nothing
-    frees it before `mcell4_run_simulation` (`src/mcell.c:92-106`). That is about 4.4 GB of the
-    full neuropil's 10.4 GB peak. MCell4's `Wall` is 520 bytes, MCell3's `struct wall` 248.
+  - Memory: MCell4's MDL path keeps MCell3's model through the whole run, since nothing frees it
+    before `mcell4_run_simulation` (`src/mcell.c:98-112`). That is about 4.4 GB of the full
+    neuropil's 10.4 GB peak. MCell4's `Wall` is 520 bytes, MCell3's `struct wall` 248.
 - **Parallel checks**, if ever needed: split by object, and keep sums in a fixed order.
 - **Surface classes on surface molecules:** the interpretation of `S'` and `S,` stays (the mark
   selects the surface molecule's own orientation) until it is redesigned.
@@ -1463,16 +1511,18 @@ then runs via `mcell4_run_simulation` → `World::init_and_run_simulation`. MCel
 1. `mcell_create()` (`:37`) — allocate the `MCELL_STATE` (= `struct volume`).
 2. `mcell_argparse(argc, argv, state)` (`:41`) — parse CLI (wraps `argparse_init`).
 3. `mcell_init_state` (`:56`), then `parse_input(state)` (`:68`) — **run the MDL parser**.
-4. `mcell_init_simulation` (`:77`), checkpoint reads, `mcell_init_output` (`:85`).
-5. **Engine branch** (`:92`):
+   On MCell4's MDL path (`-mcell4`, `-mdl2datamodel4`), `mcell4_check_vertex_indices(state)`
+   (`:73-75`) then checks every wall's vertex indices and stops on one out of range (§6.2).
+4. `mcell_init_simulation` (`:83`), checkpoint reads, `mcell_init_output` (`:91`).
+5. **Engine branch** (`:98`):
    ```c
    if (state->use_mcell4 || state->mdl2datamodel4) {
-       mcell4_convert_mcell3_volume(state);          // :93  -> build MCell4 World
-       if (mdl2datamodel4) mcell4_convert_to_data_model(...);  // :98  export JSON & exit
-       else mcell4_run_simulation(...);              // :103 -> run MCell4 engine
-       mcell4_delete_world();                        // :106
+       mcell4_convert_mcell3_volume(state);          // :99  -> build MCell4 World
+       if (mdl2datamodel4) mcell4_convert_to_data_model(...);  // :104  export JSON & exit
+       else mcell4_run_simulation(...);              // :109 -> run MCell4 engine
+       mcell4_delete_world();                        // :112
    } else {
-       mcell_run_simulation(state);                  // :109 -> legacy MCell3 engine
+       mcell_run_simulation(state);                  // :115 -> legacy MCell3 engine
        mcell_print_stats();
    }
    ```

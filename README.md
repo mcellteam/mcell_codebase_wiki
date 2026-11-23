@@ -11,9 +11,9 @@ nfsimCInterface), and its geometry analysis; the YAML→C++/nanobind code genera
 `mcell_tools` build — so you don't have to re-read the whole tree each time. Every doc carries
 `file_path:line` citations into the real source.
 
-Docs 00–05 were produced by a multi-agent mapping pass (one agent per domain document); 06, 07 and
-the design/TODO notes record later work: the pybind11→nanobind migration (06) and the VTK removal
-(07). The wiki is kept in
+Docs 00–05 were produced by a multi-agent mapping pass (one agent per domain document); 06, 07, 08
+and the design/TODO notes record later work: the pybind11→nanobind migration (06), the VTK removal
+(07) and edge connectivity by vertex index (08). The wiki is kept in
 sync with the code via the maintenance workflow below.
 
 ## Documents
@@ -31,6 +31,7 @@ reading guide (with suggested entry paths by task).
 | 05 | [`05_mcell_python_api_and_build.md`](05_mcell_python_api_and_build.md) | **Python API & build** — the YAML→C++/nanobind codegen, `mcell_tools` orchestration, the CMake build graph, static Python 3.13 + `uv` |
 | 06 | [`06_nanobind_migration_feasibility.md`](06_nanobind_migration_feasibility.md) | **pybind11→nanobind migration** — the feasibility study and the executed, validated port (Linux/macOS/Windows; `libs/pybind11` removed) |
 | 07 | [`07_vtk_removal.md`](07_vtk_removal.md) | **The VTK removal** (2026) — why VTK went, the decisions, what changed for users, how it was checked, the numbers |
+| 08 | [`08_vertex_index.md`](08_vertex_index.md) | **Edge connectivity by vertex index** (2026) — why MCell4 links walls only through their vertex indices and checks every mesh, the decisions, what changed for users of each front end, the fixed issues, how it was checked, the numbers |
 
 Notes:
 - [`DESIGN_geometry_vec3_representation.md`](DESIGN_geometry_vec3_representation.md) — design
