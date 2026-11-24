@@ -32,9 +32,10 @@ this file.
 repos (`libbng/`, `nfsim/`, `nfsimCInterface/`), the build orchestrator (`mcell_tools/`),
 and the runtime Python env (`mcell_python/`, a `uv` project on a statically-built Python 3.13).
 The root itself is **not** a git repo; each sub-project is its own repo. This wiki folder is one
-too: a **local** git repo (branch `main`, no remote), so wiki edits show up in its own
-`git status` / `git diff`. (`wiki_check.py` lists it among the repos it scans; no `RULES` row
-matches it, so that is harmless.)
+too, on GitHub as `mcellteam/mcell_codebase_wiki` (branches `master` and `mcell4_nanobind`; changes
+go to `mcell4_nanobind` first, as MCell's fixes do), so wiki edits show up in its own `git status` /
+`git diff`. (`wiki_check.py` lists it among the repos it scans; no `RULES` row matches it, so that is
+harmless.)
 
 **Activate the MCell Python venv from `$ROOT`:** `source mcell_python/.venv/bin/activate` — the
 same command on every machine, and always this root's own venv (a personal shell alias such as

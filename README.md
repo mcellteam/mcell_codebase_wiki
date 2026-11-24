@@ -70,7 +70,7 @@ $ROOT/
 ├── mcell_tools/           # build orchestrator — doc 05 §5
 ├── mcell_python/          # runtime Python env — from $ROOT: source mcell_python/.venv/bin/activate (doc 05 §7)
 ├── …                      # other repos mcell_tools checks out (mcell_tests, cellblender, …)
-└── mcell_codebase_wiki/   # this wiki (its own git repo)
+└── mcell_codebase_wiki/   # this wiki — github.com/mcellteam/mcell_codebase_wiki
 ```
 
 ```sh
