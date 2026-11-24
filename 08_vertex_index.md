@@ -136,8 +136,8 @@ name. Each code step was gated by a full test-suite run (§6).
 | 12b | MCell4's MDL path checks every wall's vertex indices before MCell3's initialization; the converter's check refuses a removed wall's index out of range; the index arguments of the Python API; three comments. | `1bb0f809`; `mcell_tests` `2272e059` |
 
 The `mcell` and `mcell_tests` commits are pushed, and since 2026-11-24 they are on `mcell4_nanobind`
-too. The two `mcell_tests_private` commits are on its branch of the same name, pushed on 2026-11-24
-(§9).
+too. The two `mcell_tests_private` commits are on its branch of the same name and on its new
+`mcell4_nanobind`, both pushed on 2026-11-24 (§9).
 
 ## 4. What replaced matching by coordinates
 
@@ -592,8 +592,10 @@ wrong, the step and commit that fixed it, and the test that covers it.
   - `mcell` (`1bb0f809`) and `mcell_tests` (`2272e059`) fast-forwarded `mcell4_nanobind`, and the
     `mcell4_nanobind` build root pulled them;
   - the two `mcell_tests_private` commits (`10e886d`, `d15b60a`) went to GitHub on that repository's
-    branch `mcell4_nanobind_vertexidx`, which the `mcell4_nanobind` root now uses: its `master` lacks
-    them, and lacks the 17 commits of `mcell4_dev` that both projects ran with;
+    branches `mcell4_nanobind_vertexidx` and `mcell4_nanobind` (new: the private tests had no branch of
+    the `mcell4_nanobind` line). The `mcell4_nanobind` root now uses `mcell4_nanobind`, as for `mcell`
+    and `mcell_tests`. Its `master` lacks these commits, and also the 17 commits of `mcell4_dev` that both
+    projects ran with;
   - these docs went into the `mcell4_nanobind` root's wiki;
   - the branches `mcell4_nanobind_vertexidx` stay on GitHub as a record.
 - **The working records,** in the `mcell4_nanobind_vertexidx` build root, outside any repository:
