@@ -56,6 +56,11 @@ vertex-index project. Every doc
 carries `file_path:line` citations. **Prefer reading the relevant wiki doc before re-deriving
 structure from source.**
 
+**Open issues:** `mcell_codebase_wiki/TODO_open_issues.md` lists the issues that the VTK removal and
+the vertex-index project found but left open (surface classes, clamps, the order within an iteration,
+vertex moves, MCell4's MDL path, MCell3's engine, geometry, the tests, platforms), each with its
+evidence and citations. Read an issue's section before working on it, and add newly found issues there.
+
 Key facts worth holding (details + citations in the wiki):
 - **Two engines:** `mcell/src/` = MCell3 (C-as-C++, MDL); `mcell/src4/` = MCell4 (C++17, the real
   engine). An MDL file takes one of two paths. MCell4's MDL path (`mcell -mcell4`) goes
