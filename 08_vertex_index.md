@@ -8,7 +8,7 @@
 > geometry report, stops on errors and never repairs a mesh. MCell3's engine is unchanged, and so
 > is MCell3's code, but for one call that MCell4's MDL path makes in `src/mcell.c`. The work is on
 > branch `mcell4_nanobind_vertexidx` of `mcell` and `mcell_tests` (November 2026), on top of the
-> VTK removal (doc 07), and is to be merged into `mcell4_nanobind`.
+> VTK removal (doc 07), and was merged into `mcell4_nanobind` on 2026-11-24.
 >
 > An MDL file takes one of two paths: **MCell3's engine** (`mcell file.mdl`) or **MCell4's MDL
 > path** (`mcell -mcell4 file.mdl`, also `-mdl2datamodel4`). Both run MCell3's parser and MCell3's
@@ -108,6 +108,7 @@
 | 2026-11-20 | Model tests for every line, stop and exit code; the full neuropil checked and benchmarked against the build from before the project. The memory of MCell3's model, which MCell4's MDL path keeps through the run, is recorded, to be decided later. The docs: doc 04 §6 rewritten as the reference, with the known issues, and this record. |
 | 2026-11-23 | **No vertex index out of range, and no negative index, from any input of MCell4.** MCell4's MDL path checks the vertex indices of every wall, also of the walls that `REMOVE_ELEMENTS` removes, right after MCell3's parser and before MCell3's initialization, which would read the vertices through them; the run stops with `MESH_INVALID_INDICES`. The converter's own check refuses a removed wall's index out of range too. MCell3's engine path doesn't change. No input names an edge: MCell4 makes every edge from a side of a wall. |
 | 2026-11-23 | Python API models: `Model.add_vertex_move` raises for an index out of range, as the getters do, instead of ending Python; the getters' message for a wall index names the wall list; the constructor's range test, which never ran, goes. Every statement about an MDL file names its path: MCell3's engine, or MCell4's MDL path. |
+| 2026-11-24 | **The project ends after step 12b.** Its planned steps 13-17 aren't about connectivity by vertex index. They, and every other open issue found during the VTK removal and this project, go into a TODO note for later projects, `TODO_open_issues.md`. |
 
 ## 3. Steps and commits
 
@@ -134,8 +135,9 @@ name. Each code step was gated by a full test-suite run (§6).
 | 12, 12a | The wiki: doc 04 §6 and §3.7, and the docs that point to them; this record. | wiki `d65cbcf` (branch `vertex_index`); this record |
 | 12b | MCell4's MDL path checks every wall's vertex indices before MCell3's initialization; the converter's check refuses a removed wall's index out of range; the index arguments of the Python API; three comments. | `1bb0f809`; `mcell_tests` `2272e059` |
 
-The `mcell` and `mcell_tests` commits are pushed. The two `mcell_tests_private` commits are on a
-local branch of the same name, never pushed (§9).
+The `mcell` and `mcell_tests` commits are pushed, and since 2026-11-24 they are on `mcell4_nanobind`
+too. The two `mcell_tests_private` commits are on its branch of the same name, pushed on 2026-11-24
+(§9).
 
 ## 4. What replaced matching by coordinates
 
@@ -556,7 +558,10 @@ wrong, the step and commit that fixed it, and the test that covers it.
 
 ## 9. What is left, and where the records are
 
-- **Later steps,** numbered as in the plan (doc 04 says "Planned" in words):
+- **The project ended after step 12b** (the user, 2026-11-24). The planned steps 13-17 aren't about
+  connectivity by vertex index, so they left the project. With every other open issue found along the
+  way, they are listed for later projects in `TODO_open_issues.md` (step 13's investigation of
+  surface classes in its §1). The steps, numbered as in the plan (doc 04 says "Planned" in words):
   - **13:** MCell4's own checks for conflicting surface classes on one wall, for both converters (doc
     04 §6.12, "Conflicting surface classes on one wall").
   - **14:** clamps in exported data models from the model's clamp definitions, one entry per class,
@@ -583,9 +588,14 @@ wrong, the step and commit that fixed it, and the test that covers it.
     (§8, item 4).
   - 376 test failures predate the project and weren't investigated, as in the VTK removal; the
     gates therefore compared output files as well as statuses.
-- **The merge:** `mcell` and `mcell_tests` merge into `mcell4_nanobind`, as the VTK removal did. The
-  two `mcell_tests_private` commits (`10e886d`, `d15b60a`) are on a local branch, never pushed. These
-  docs are drafts on the wiki clone's branch `vertex_index`, to go into the wiki with the merge.
+- **The merge** (2026-11-24), as the VTK removal did:
+  - `mcell` (`1bb0f809`) and `mcell_tests` (`2272e059`) fast-forwarded `mcell4_nanobind`, and the
+    `mcell4_nanobind` build root pulled them;
+  - the two `mcell_tests_private` commits (`10e886d`, `d15b60a`) went to GitHub on that repository's
+    branch `mcell4_nanobind_vertexidx`, which the `mcell4_nanobind` root now uses: its `master` lacks
+    them, and lacks the 17 commits of `mcell4_dev` that both projects ran with;
+  - these docs went into the `mcell4_nanobind` root's wiki;
+  - the branches `mcell4_nanobind_vertexidx` stay on GitHub as a record.
 - **The working records,** in the `mcell4_nanobind_vertexidx` build root, outside any repository:
   - `PLAN_vertex_index.md`: every decision in its wording, the steps, the results, the known issues
     and the TODOs;
@@ -594,5 +604,6 @@ wrong, the step and commit that fixed it, and the test that covers it.
   - `possible_implementation/`: the prototypes and the table's design;
   - `vertex_index_spike/`: the step-1 scan, the generator of `mesh_utils_test`'s data, and the
     experiments behind each decision, with this record's runs of the build from before the project;
-  - `vertex_index_runs/`: every gate's log and comparisons, and the comparison scripts. The gates'
-    work folders are on the local disk of the machine that ran them.
+  - `vertex_index_runs/`: every gate's log and comparisons, and the comparison scripts. Of the gates'
+    work folders only the last one, `step12b2`'s, is kept, on the local disk of the machine that ran
+    it; the others were deleted when the project ended.

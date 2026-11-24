@@ -40,6 +40,10 @@ Notes:
 - [`TODO_track_b_nutmeg_error_message.md`](TODO_track_b_nutmeg_error_message.md) — tracker for the
   last nanobind follow-up (the nutmeg `2000_shorter_error_message` test); its header gives the
   current status.
+- [`TODO_open_issues.md`](TODO_open_issues.md) — the open issues of MCell found during the VTK
+  removal and the vertex-index project, collected for later projects (2026-11-24): surface classes,
+  clamps, the order within an iteration, vertex moves, MCell4's MDL path, MCell3's engine, geometry,
+  the tests, platforms.
 
 Plus:
 - [`MAINTENANCE.md`](MAINTENANCE.md) — how to keep the wiki current (change→doc map, drift checklist, the helper).

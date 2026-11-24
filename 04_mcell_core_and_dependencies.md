@@ -1307,7 +1307,8 @@ of `mesh_table.hpp`. Its data is in `mcell_tests/tests/utils_tests/mesh_utils/` 
 ### 6.12 Known issues
 
 Issues of the engine that aren't about geometry, such as barriers and the order within an
-iteration, are in §3.7.
+iteration, are in §3.7. Every open issue, these and the others found during the VTK removal and the
+vertex-index project, is listed for later projects in `TODO_open_issues.md`.
 
 **MDL files** (each item names the path: MCell3's engine, or MCell4's MDL path through
 `MCell3WorldConverter`):
@@ -1353,6 +1354,11 @@ iteration, are in §3.7.
   An example is a CLAMP with a TRANSPARENT, REFLECTIVE or ABSORPTIVE rule for the same molecule. So
   an MDL file gets MCell3's errors on both paths, and Python API models get none. Planned: MCell4's
   own checks for both converters (a wall clamped twice already stops, §6.6).
+  - MCell4 also gives wrong results, with no message, for some combinations that MCell3's engine
+    runs correctly. Examples: REFLECTIVE beside a reaction of a volume molecule; a border property
+    and a reaction of a surface molecule in one class; a class that reaches a wall through two
+    regions; a clamp in a Python API class's `properties` list. Runs and causes:
+    `TODO_open_issues.md` §1.
 
 **Geometry and its uses:**
 - **Walls that cross at an angle aren't detected.** `check_for_overlapped_walls`
